@@ -1,0 +1,12 @@
+*.zip
+Training_WFDB/*
+output/*
+*.DS_Store
+*.sav
+__pycache__/*
+*.txt
+*.pyc
+*.csv
+*.pkl
+*.npy
+*.png

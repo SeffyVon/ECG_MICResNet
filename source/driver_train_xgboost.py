@@ -210,34 +210,34 @@ if __name__ == '__main__':
 #%%
 
     
-    df_X = df.drop(['Dx']+labels, axis=1).astype(float)
-    df_y = df[labels]
-#%%
-    # Train/Load model.
-    print('Training 12ECG model...')
-    params = {'max_depth': 500}
-    output_name = 'multiouput_xgb_fbeta2'
-    model = train_xgboost(df_X.to_numpy(), df_y.to_numpy(), output_name, params) 
+#     df_X = df.drop(['Dx']+labels, axis=1).astype(float)
+#     df_y = df[labels]
+# #%%
+#     # Train/Load model.
+#     print('Training 12ECG model...')
+#     params = {'max_depth': 500}
+#     output_name = 'multiouput_xgb_fbeta2'
+#     model = train_xgboost(df_X.to_numpy(), df_y.to_numpy(), output_name, params) 
 
-    # Testing
-    print('Testing ...')
-    preds_all = model.predict(df_X.to_numpy())
-    probs_all = model.predict_proba(df_X.to_numpy())
+#     # Testing
+#     print('Testing ...')
+#     preds_all = model.predict(df_X.to_numpy())
+#     probs_all = model.predict_proba(df_X.to_numpy())
     
-    # Evaluate
-    print('Evaluate ...')
-    accuracy,f_measure,f_beta,g_beta = compute_beta_score(labels=df[labels].to_numpy(), 
-                       output=preds_all, 
-                       beta=2, num_classes=9)
+#     # Evaluate
+#     print('Evaluate ...')
+#     accuracy,f_measure,f_beta,g_beta = compute_beta_score(labels=df[labels].to_numpy(), 
+#                        output=preds_all, 
+#                        beta=2, num_classes=9)
     
-    auroc, auprc = compute_auc(labels=df[labels].to_numpy(), 
-                               probabilities=probs_all,
-                               num_classes=9)
+#     auroc, auprc = compute_auc(labels=df[labels].to_numpy(), 
+#                                probabilities=probs_all,
+#                                num_classes=9)
     
-    output_string = 'AUROC|AUPRC|Accuracy|F-measure|Fbeta-measure|Gbeta-measure\n{:.3f}|{:.3f}|{:.3f}|{:.3f}|{:.3f}|{:.3f}'.format(auroc,auprc,accuracy,f_measure,f_beta,g_beta)
-    print(output_string)     
-    with open('xgb/saved/'+output_name+'score.txt', 'w') as f:
-        f.write(output_string)
+#     output_string = 'AUROC|AUPRC|Accuracy|F-measure|Fbeta-measure|Gbeta-measure\n{:.3f}|{:.3f}|{:.3f}|{:.3f}|{:.3f}|{:.3f}'.format(auroc,auprc,accuracy,f_measure,f_beta,g_beta)
+#     print(output_string)     
+#     with open('xgb/saved/'+output_name+'score.txt', 'w') as f:
+#         f.write(output_string)
 
 
     #%% 
@@ -295,153 +295,153 @@ if __name__ == '__main__':
     
     #%%
     df_infos = pd.DataFrame(infos, columns=['ptID','Sex','Age']+labels)
-    # df_infos.to_csv('../saved/infos.csv')
-    #%%
+    df_infos.to_csv('../saved/infos.csv')
     
 #%%
-    lens = [fData.shape[1] for fData in fDatas]
-    print(lens)
-    [plt.plot(fData[6]) for fData in fDatas]
+    # lens = [fData.shape[1] for fData in fDatas]
+    # print(lens)
+    # [plt.plot(fData[6]) for fData in fDatas]
 
     #%%
     fDataRes=np.array([signal.resample(fData, 250, axis=1) for fData in fDatas])
+    np.save('../saved/fDataRes.npy', fDataRes)
     #[plt.plot(fDataRe[6]) for fDataRe in fDataRes]
     
     #%%
-    #np.save('../saved/fDataRes.npy', fDataRes)
     
-    #%%
-    from sklearn.preprocessing import normalize
-    #fDataReNorms=[fDataRe-np.tile(fDataRe[:,0],(250,1)).transpose() for fDataRe in fDataRes]
-    fDataReNorms=[normalize(fDataRe) for fDataRe in fDataRes]
     
-    [plt.plot(fDataReNorm[6]) for fDataReNorm in fDataReNorms]
+    # #%%
+    # from sklearn.preprocessing import normalize
+    # #fDataReNorms=[fDataRe-np.tile(fDataRe[:,0],(250,1)).transpose() for fDataRe in fDataRes]
+    # fDataReNorms=[normalize(fDataRe) for fDataRe in fDataRes]
     
-    #%%
-    df_X = np.array(fDataReNorms)
+    # [plt.plot(fDataReNorm[6]) for fDataReNorm in fDataReNorms]
     
-    #%%
-    af_idx = np.argwhere(df_infos['RBBB']).flatten()
-    #%%
-    df_X_af = df_X[af_idx]
+    # #%%
+    # df_X = np.array(fDataReNorms)
+    
+    # #%%
+    # af_idx = np.argwhere(df_infos['RBBB']).flatten()
+    # #%%
+    # df_X_af = df_X[af_idx]
             
-    #%%
-    for X_af in df_X_af[::10]:
-        plt.plot(X_af[0])
-        plt.show()
+    # #%%
+    # for X_af in df_X_af[::10]:
+    #     plt.plot(X_af[0])
+    #     plt.show()
     
-    #%%
-    from collections import Counter
-    print(Counter(np.sum(df_infos[labels], axis=1)))
+    # #%%
+    # from collections import Counter
+    # print(Counter(np.sum(df_infos[labels], axis=1)))
     
     
-    #%%
+    # #%%
     
-    import torch
-    import torch.nn as nn
-    import torch.nn.functional as F
-    import torch.optim as optim
+    # import torch
+    # import torch.nn as nn
+    # import torch.nn.functional as F
+    # import torch.optim as optim
     
-    class SimpleNet(nn.Module) :
-    def __init__(self, n_input, n_h1) :
-        "Defines the parameters of the model."
-        super(TwoFullNet, self).__init__()
-        self.fc1        = nn.Linear(n_input, n_h1)
-        self.fc2        = nn.Linear(n_h1, n_h2)
+    # class SimpleNet(nn.Module) :
+    # def __init__(self, n_input, n_h1) :
+    #     "Defines the parameters of the model."
+    #     super(TwoFullNet, self).__init__()
+    #     self.fc1        = nn.Linear(n_input, n_h1)
+    #     self.fc2        = nn.Linear(n_h1, n_h2)
 
-    def forward(self, x) :
-        """
-        Apply the model to some input data x.
-        You can think of x as an image of size 28x28, but it is
-        actually an Mx28x28 tensor, where M is the size of the
-        mini-batch.
-        """
-        x = self.fc1( x )     
-        x = F.relu(   x )     
-        x = self.fc2( x )     
-        return F.log_softmax(x) 
+    # def forward(self, x) :
+    #     """
+    #     Apply the model to some input data x.
+    #     You can think of x as an image of size 28x28, but it is
+    #     actually an Mx28x28 tensor, where M is the size of the
+    #     mini-batch.
+    #     """
+    #     x = self.fc1( x )     
+    #     x = F.relu(   x )     
+    #     x = self.fc2( x )     
+    #     return F.log_softmax(x) 
     
-    sn = SimpleNet(250, 250).forward(X)
+    # sn = SimpleNet(250, 250).forward(X)
     
-    #%%
-    def get_accuracy(output, y):
+    # #%%
+    # def get_accuracy(output, y):
     
-        output1 = np.argmax(output, axis=1)
-        return balanced_accuracy_score(y, output1)
+    #     output1 = np.argmax(output, axis=1)
+    #     return balanced_accuracy_score(y, output1)
     
-    def get_auc(output, y):
-        auroc, auprc = compute_auc(labels=y, 
-                               probabilities=output,
-                               num_classes=9)
+    # def get_auc(output, y):
+    #     auroc, auprc = compute_auc(labels=y, 
+    #                            probabilities=output,
+    #                            num_classes=9)
         
-        return auroc, auprc
+    #     return auroc, auprc
         
-    #%%
+    # #%%
     
-    from snippets.pytorchtools import EarlyStopping
-    from sklearn.model_selection import KFold
+    # from snippets.pytorchtools import EarlyStopping
+    # from sklearn.model_selection import KFold
     
-    st = time.time()
-    patience = 200
+    # st = time.time()
+    # patience = 200
 
-    for split in kf.split(X, y):
-        model = SimpleNet(X).to(device)
+    # for split in kf.split(X, y):
+    #     model = SimpleNet(X).to(device)
         
-        learning_rate = 0.01
-        optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+    #     learning_rate = 0.01
+    #     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
-        criterion = nn.CrossEntropyLoss(weight=weight)
+    #     criterion = nn.CrossEntropyLoss(weight=weight)
 
-        losses_train = []
-        losses_test = []
+    #     losses_train = []
+    #     losses_test = []
     
-        avg_losses_train = []
-        avg_losses_test = []
+    #     avg_losses_train = []
+    #     avg_losses_test = []
     
 
-        early_stopping = EarlyStopping(patience, verbose=False, 
-                                   saved_dir=saved_dir, save_name=str(i))
+    #     early_stopping = EarlyStopping(patience, verbose=False, 
+    #                                saved_dir=saved_dir, save_name=str(i))
         
-        for epoch in range(1000):
-            train_loss = 0
-            validation_loss = 0
+    #     for epoch in range(1000):
+    #         train_loss = 0
+    #         validation_loss = 0
             
-            correct = 0
+    #         correct = 0
             
-            optimizer.zero_grad()
-            output_train = model(X[train_idx])
-            output_test = model(X[test_idx])
+    #         optimizer.zero_grad()
+    #         output_train = model(X[train_idx])
+    #         output_test = model(X[test_idx])
             
     
-            loss_train = criterion(output_train, y[train_idx])
-            loss_test = criterion(output_test, y[test_idx])
+    #         loss_train = criterion(output_train, y[train_idx])
+    #         loss_test = criterion(output_test, y[test_idx])
             
-            optimizer.zero_grad()
-            loss_train.backward()
-            optimizer.step()
+    #         optimizer.zero_grad()
+    #         loss_train.backward()
+    #         optimizer.step()
             
-            losses_train.append(loss_train.item())
-            losses_test.append(loss_test.item())
+    #         losses_train.append(loss_train.item())
+    #         losses_test.append(loss_test.item())
             
-            avg_loss_train = np.average(losses_train)
-            avg_loss_test = np.average(losses_test)
+    #         avg_loss_train = np.average(losses_train)
+    #         avg_loss_test = np.average(losses_test)
             
-            avg_losses_train.append(avg_loss_train)
-            avg_losses_test.append(avg_loss_test)
+    #         avg_losses_train.append(avg_loss_train)
+    #         avg_losses_test.append(avg_loss_test)
             
-            if epoch % 50 == 0:
-                train_acc1 = get_accuracy((output_train.data).cpu().numpy(), 
-                                                      (y[train_idx].data).cpu().numpy())
-                test_acc1 = get_accuracy((output_test.data).cpu().numpy(), 
-                                                     (y[test_idx].data).cpu().numpy())
+    #         if epoch % 50 == 0:
+    #             train_acc1 = get_accuracy((output_train.data).cpu().numpy(), 
+    #                                                   (y[train_idx].data).cpu().numpy())
+    #             test_acc1 = get_accuracy((output_test.data).cpu().numpy(), 
+    #                                                  (y[test_idx].data).cpu().numpy())
                 
-                print('S{}/{} Train Loss: {:.6f}, Acc: {:.4f}| Validation Loss: {:.6f}, Acc: {:.4f}| {:.2f} min'.format(i, epoch, avg_loss_train, train_acc1, avg_loss_test, test_acc1, (time.time()-st)/60 ))
-    #            torch.save(model.state_dict(), saved_dir + '/saved_model/fold{}_{}'.format(i, epoch))
+    #             print('S{}/{} Train Loss: {:.6f}, Acc: {:.4f}| Validation Loss: {:.6f}, Acc: {:.4f}| {:.2f} min'.format(i, epoch, avg_loss_train, train_acc1, avg_loss_test, test_acc1, (time.time()-st)/60 ))
+    # #            torch.save(model.state_dict(), saved_dir + '/saved_model/fold{}_{}'.format(i, epoch))
     
-            early_stopping(avg_loss_test, model)
+    #         early_stopping(avg_loss_test, model)
             
-            if early_stopping.early_stop:
-                print("Early stopping")
-                break
+    #         if early_stopping.early_stop:
+    #             print("Early stopping")
+    #             break
         
     

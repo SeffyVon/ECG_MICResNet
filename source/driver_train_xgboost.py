@@ -2,7 +2,7 @@
 
 import numpy as np, os, sys
 from scipy.io import loadmat
-from xgb.train_xgboost import train_xgboost
+#from xgb.train_xgboost import train_xgboost
 from evaluate_12ECG_score import compute_beta_score, compute_auc
 import pandas as pd
 from xgb.global_vars import headers, labels

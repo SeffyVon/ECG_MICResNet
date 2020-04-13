@@ -2,10 +2,9 @@
 
 import numpy as np, os, sys
 from scipy.io import loadmat
-#from xgb.train_xgboost import train_xgboost
 #from evaluate_12ECG_score import compute_beta_score, compute_auc
 import pandas as pd
-from source.global_vars import headers, labels
+from global_vars import headers, labels
     
 def load_challenge_data(filename):
 
@@ -146,7 +145,7 @@ def findpeaks(data, spacing=1, limit=None):
     return ind
 
 from scipy.signal import find_peaks
-def sep_rr_interval(bspm, margin=0, height=0.3, distance=400, plot=False):
+def sep_rr_interval(bspm, percentile, distance=400, period_len=800, plot=False, p='', idx=''):
     # bspm: 252 x t
     
     rr_intervals = []
@@ -155,18 +154,42 @@ def sep_rr_interval(bspm, margin=0, height=0.3, distance=400, plot=False):
     for t in range(total_time):
         lead_vars[t] = np.var(bspm[:,t])
     lead_vars/=np.max(lead_vars)
-    peaks = find_peaks(lead_vars, height=height, distance=distance)[0]
+    
+    start_point = int(period_len/2)
+    n_periods = int(len(lead_vars)/start_point)
+    peak_values = []
+    for i in range(n_periods-1):
+        
+        peak_value_ints = find_peaks(lead_vars[start_point*i:start_point*i+period_len])[0]
+        if len(peak_value_ints) > 0:
+            peak_value_ints_max = np.max(lead_vars[start_point*i:][peak_value_ints])
+            peak_values.append(peak_value_ints_max)
+    
+    #print(peak_values)
+    peak_value = 0
+    if len(peak_values) > 0:
+        peak_value = np.min(peak_values)
+        
+    peaks = find_peaks(lead_vars, height=peak_value, distance=distance)[0]
     if plot:
         plt.plot(lead_vars)
     for i in range(len(peaks)-1):
         if plot:
             plt.axvline(peaks[i], c='C1')
-        rr_intervals.append((peaks[i]-margin, peaks[i+1]+margin))
+        rr_intervals.append((peaks[i], peaks[i+1]))
     if plot:
-        plt.axvline(peaks[-1], c='C1')
-        plt.title(str(peaks))
-        plt.show()
-    return rr_intervals
+        if len(peaks) > 0:
+            plt.axvline(peaks[-1], c='C1')
+        intervals = np.diff(peaks)
+        mean_intervals = np.mean(intervals)
+        std_intervals = np.std(intervals)
+        plt.axhline(peak_value, c='C2', label=str(peak_value))
+        plt.legend()
+        plt.title(str(len(intervals))+' ' + str(mean_intervals) + '_' + str(std_intervals))
+        plt.savefig('../result/pAF/rr/'+str(idx) + '_'+str(p))
+        
+        plt.close()
+    return rr_intervals, mean_intervals, std_intervals
 
         
 def get_basic_info(header_data, labels):
@@ -196,7 +219,7 @@ if __name__ == '__main__':
     
     print('Load data...')
     
-    if not 'datas' in locals():
+    if not 'datas' in locals() or datas is None:
         datas = None
         header_datas = None
         classes = None
@@ -269,30 +292,54 @@ if __name__ == '__main__':
 
     #%%
     import matplotlib.pyplot as plt
-    qrs_chn = 7
-    fDatas = []
-    infos =[]
-    for idx in range(len(datas)):
-        fData = filter_data(datas[idx][:,1000:], highcut=50.0)
-        #fData = datas[idx][:,1000:]
-        intervals = sep_rr_interval(fData[:3], height=0.2, distance=200, plot=False)
-        
+    #fDatas = []
+    #infos =[]
+    period_len = 500
+    rr_max = 650
+    std_th = 200
+    rr_min = 150
+    for idx in range(480, len(datas)):
         # basic info
         info = get_basic_info(header_datas[idx], labels)
         
         
         # get data
         ptID = info[0]
-        print(str(idx) + ' ' + ptID)
+        
+        
+        fData = filter_data(datas[idx][:,2000:], highcut=30.0)
+        #fData = datas[idx][:,1000:]
+        intervals, mean_intervals, std_intervals = sep_rr_interval(fData[6:], percentile=90, distance=rr_min, 
+                                    plot=True, idx=idx, p=ptID, period_len=period_len)
+        if len(intervals) == 0 or mean_intervals > rr_max or std_intervals > std_th:
+            intervals, mean_intervals, std_intervals = sep_rr_interval(fData[:6], percentile=90, distance=rr_min, 
+                                    plot=True, idx=idx, p=ptID, period_len=period_len)
+        if len(intervals) == 0 or mean_intervals > rr_max or std_intervals > std_th:
+            intervals, mean_intervals, std_intervals = sep_rr_interval(fData[:3], percentile=90, distance=rr_min, 
+                                    plot=True, idx=idx, p=ptID, period_len=period_len)  
+        info += [mean_intervals, std_intervals]
+        print(str(idx) + ' ' + ptID + " {:.2f} {:.2f}".format(mean_intervals, std_intervals))
+        
+        if len(intervals) == 0 or mean_intervals > rr_max or std_intervals > std_th:
+            break
+        
+        
+        
         for i in range(len(intervals)):
             l, r = intervals[i]
             fDatas.append(fData[:,l:r])
-            infos.append(info)
+            infos.append(info + [r-l]) # add interval length
             
         #     plt.plot(fData[0,l-100:r+100])
         #     plt.savefig('../result/pAF/seg/'+str(idx)+'_'+ptID+'_'+str(i))
         #     plt.close()
+    #%%
     
+    #%%
+    # from sklearn.decomposition import FastICA
+    # transform = FastICA(n_components=4)
+    # fDataICA
+    # = transform.fit_transform(fData.transpose()).transpose()
     #%%
     df_infos = pd.DataFrame(infos, columns=['ptID','Sex','Age']+labels)
     df_infos.to_csv('../saved/infos.csv')

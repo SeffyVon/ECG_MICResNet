@@ -177,12 +177,12 @@ def sep_rr_interval(bspm, percentile, distance=400, period_len=800, plot=False, 
         if plot:
             plt.axvline(peaks[i], c='C1')
         rr_intervals.append((peaks[i], peaks[i+1]))
+    intervals = np.diff(peaks)
+    mean_intervals = np.mean(intervals)
+    std_intervals = np.std(intervals)
     if plot:
         if len(peaks) > 0:
             plt.axvline(peaks[-1], c='C1')
-        intervals = np.diff(peaks)
-        mean_intervals = np.mean(intervals)
-        std_intervals = np.std(intervals)
         plt.axhline(peak_value, c='C2', label=str(peak_value))
         plt.legend()
         plt.title(str(len(intervals))+' ' + str(mean_intervals) + '_' + str(std_intervals))
@@ -292,13 +292,13 @@ if __name__ == '__main__':
 
     #%%
     import matplotlib.pyplot as plt
-    #fDatas = []
-    #infos =[]
+    fDatas = []
+    infos =[]
     period_len = 500
     rr_max = 650
     std_th = 200
     rr_min = 150
-    for idx in range(480, len(datas)):
+    for idx in range(len(datas)):
         # basic info
         info = get_basic_info(header_datas[idx], labels)
         
@@ -310,13 +310,13 @@ if __name__ == '__main__':
         fData = filter_data(datas[idx][:,2000:], highcut=30.0)
         #fData = datas[idx][:,1000:]
         intervals, mean_intervals, std_intervals = sep_rr_interval(fData[6:], percentile=90, distance=rr_min, 
-                                    plot=True, idx=idx, p=ptID, period_len=period_len)
+                                    plot=False, idx=idx, p=ptID, period_len=period_len)
         if len(intervals) == 0 or mean_intervals > rr_max or std_intervals > std_th:
             intervals, mean_intervals, std_intervals = sep_rr_interval(fData[:6], percentile=90, distance=rr_min, 
-                                    plot=True, idx=idx, p=ptID, period_len=period_len)
+                                    plot=False, idx=idx, p=ptID, period_len=period_len)
         if len(intervals) == 0 or mean_intervals > rr_max or std_intervals > std_th:
             intervals, mean_intervals, std_intervals = sep_rr_interval(fData[:3], percentile=90, distance=rr_min, 
-                                    plot=True, idx=idx, p=ptID, period_len=period_len)  
+                                    plot=False, idx=idx, p=ptID, period_len=period_len)  
         info += [mean_intervals, std_intervals]
         print(str(idx) + ' ' + ptID + " {:.2f} {:.2f}".format(mean_intervals, std_intervals))
         
@@ -341,7 +341,7 @@ if __name__ == '__main__':
     # fDataICA
     # = transform.fit_transform(fData.transpose()).transpose()
     #%%
-    df_infos = pd.DataFrame(infos, columns=['ptID','Sex','Age']+labels)
+    df_infos = pd.DataFrame(infos, columns=['ptID','Sex','Age']+labels+['int_means','int_vars','int_len'])
     df_infos.to_csv('../saved/infos.csv')
     
 #%%

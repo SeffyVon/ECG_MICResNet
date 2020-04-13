@@ -114,35 +114,6 @@ def filter_data(Data, highcut=None):
 
     return Data_filtered
 
-def findpeaks(data, spacing=1, limit=None):
-    """Finds peaks in `data` which are of `spacing` width and >=`limit`.
-    :param data: values
-    :param spacing: minimum spacing to the next peak (should be 1 or more)
-    :param limit: peaks should have value greater or equal
-    :return:
-    """
-    len = data.size
-    x = np.zeros(len+2*spacing)
-    x[:spacing] = data[0]-1.e-6
-    x[-spacing:] = data[-1]-1.e-6
-    x[spacing:spacing+len] = data
-    peak_candidate = np.zeros(len)
-    peak_candidate[:] = True
-    for s in range(spacing):
-        start = spacing - s - 1
-        h_b = x[start : start + len]  # before
-        start = spacing
-        h_c = x[start : start + len]  # central
-        start = spacing + s + 1
-        h_a = x[start : start + len]  # after
-        peak_candidate = np.logical_and(peak_candidate,
-                                        np.logical_and(h_c > h_b, h_c > h_a))
-
-    ind = np.argwhere(peak_candidate)
-    ind = ind.reshape(ind.size)
-    if limit is not None:
-        ind = ind[data[ind] > limit]
-    return ind
 
 from scipy.signal import find_peaks
 def sep_rr_interval(bspm, percentile, distance=400, period_len=800, plot=False, p='', idx=''):
@@ -294,10 +265,11 @@ if __name__ == '__main__':
     import matplotlib.pyplot as plt
     fDatas = []
     infos =[]
-    period_len = 500
+    period_len = 400
     rr_max = 650
-    std_th = 200
-    rr_min = 150
+    std_th = 220
+    rr_min = 200
+    plot = False
     for idx in range(len(datas)):
         # basic info
         info = get_basic_info(header_datas[idx], labels)
@@ -310,13 +282,13 @@ if __name__ == '__main__':
         fData = filter_data(datas[idx][:,2000:], highcut=30.0)
         #fData = datas[idx][:,1000:]
         intervals, mean_intervals, std_intervals = sep_rr_interval(fData[6:], percentile=90, distance=rr_min, 
-                                    plot=False, idx=idx, p=ptID, period_len=period_len)
+                                    plot=plot, idx=idx, p=ptID, period_len=period_len)
         if len(intervals) == 0 or mean_intervals > rr_max or std_intervals > std_th:
             intervals, mean_intervals, std_intervals = sep_rr_interval(fData[:6], percentile=90, distance=rr_min, 
-                                    plot=False, idx=idx, p=ptID, period_len=period_len)
+                                    plot=plot, idx=idx, p=ptID, period_len=period_len)
         if len(intervals) == 0 or mean_intervals > rr_max or std_intervals > std_th:
             intervals, mean_intervals, std_intervals = sep_rr_interval(fData[:3], percentile=90, distance=rr_min, 
-                                    plot=False, idx=idx, p=ptID, period_len=period_len)  
+                                    plot=plot, idx=idx, p=ptID, period_len=period_len)  
         info += [mean_intervals, std_intervals]
         print(str(idx) + ' ' + ptID + " {:.2f} {:.2f}".format(mean_intervals, std_intervals))
         
@@ -341,7 +313,7 @@ if __name__ == '__main__':
     # fDataICA
     # = transform.fit_transform(fData.transpose()).transpose()
     #%%
-    df_infos = pd.DataFrame(infos, columns=['ptID','Sex','Age']+labels+['int_means','int_vars','int_len'])
+    df_infos = pd.DataFrame(infos, columns=['ptID','Sex','Age']+labels+['mean_intervals','std_intervals','interval_len'])
     df_infos.to_csv('../saved/infos.csv')
     
 #%%

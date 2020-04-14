@@ -180,8 +180,9 @@ def get_basic_info(header_data, labels):
             else:
                 sex=0
         elif iline.startswith('#Dx'):
-            Dx = iline.split(': ')[1].split(',')[0]
+            Dx = np.char.rstrip(iline.split(': ')[1].split(','))
             label = [ll in Dx for ll in labels]
+            
     
     return [ptID, sex, age] + label
     

@@ -44,6 +44,19 @@ def confusion(prediction, truth):
 
     return true_positives, false_positives, true_negatives, false_negatives
 
+
+def binary_acc_core(y_test_numpy, y_pred_prob_numpy):
+    # auroc
+
+    auroc = roc_auc_score(y_test_numpy, y_pred_prob_numpy)
+
+    # auprc
+    precision, recall, thresholds = precision_recall_curve(y_test_numpy, y_pred_prob_numpy)
+    auprc = auc(recall, precision)
+
+    # binary result
+    return auroc, auprc
+
 def binary_acc(y_preds, y_tests, beta=2):
     accs = []
     fmeasures = []
@@ -57,29 +70,24 @@ def binary_acc(y_preds, y_tests, beta=2):
         # prob
         y_pred_prob = torch.sigmoid(y_pred)
         
-        # auroc
         y_test_numpy = y_test.data.cpu().numpy()
         y_pred_prob_numpy = y_pred_prob.data.cpu().numpy()
-        auroc = roc_auc_score(y_test_numpy, y_pred_prob_numpy)
+    
+        auroc, auprc = binary_acc_core(y_test_numpy, y_pred_prob_numpy)
+        # old way to cal acc:
+        #correct_results_sum = (y_pred_tag == y_test).sum().float()
+        #acc = true_positives/y_test.shape[0]
+        #acc = torch.round(acc * 100)
         
-        # auprc
-        precision, recall, thresholds = precision_recall_curve(y_test_numpy, y_pred_prob_numpy)
-        auprc = auc(recall, precision)
-
-        # binary result
         y_pred_tag = torch.round(y_pred_prob)
         tp, fp, tn, fn = confusion(y_pred_tag, y_test)
-        
+
         # acc, fmeasure, fbeta, gbeta
         acc = float(tp + tn) / float(tp + fp + fn + tn)
         fmeasure = float(2 * tp) / float(2 * tp + fp + fn)
         fbeta = float((1+beta**2)* tp) / float(((1+beta**2)*tp) + (fn*beta**2) + fp)
         gbeta = float(tp) / float(tp + fp + beta*fn)
-        
-        # old way to cal acc:
-        #correct_results_sum = (y_pred_tag == y_test).sum().float()
-        #acc = true_positives/y_test.shape[0]
-        #acc = torch.round(acc * 100)
+    
 
         accs.append(acc)#.data.cpu().numpy())
         fbetas.append(fbeta)#.data.cpu().numpy())

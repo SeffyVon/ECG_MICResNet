@@ -57,6 +57,13 @@ def binary_acc_core(y_test_numpy, y_pred_prob_numpy):
     # binary result
     return auroc, auprc
 
+def agg_y_preds(y_preds):
+    y_pred_probs = torch.sigmoid(y_preds)
+    y_pred_prob_max, _ = torch.max(y_pred_probs, axis=0)
+    y_pred_prob_mean = torch.mean(y_pred_probs, axis=0)
+    
+    return y_pred_prob_max, y_pred_prob_mean
+    
 def binary_acc(y_preds, y_tests, beta=2):
     accs = []
     fmeasures = []
@@ -70,8 +77,12 @@ def binary_acc(y_preds, y_tests, beta=2):
         # prob
         y_pred_prob = torch.sigmoid(y_pred)
         
-        y_test_numpy = y_test.data.cpu().numpy()
-        y_pred_prob_numpy = y_pred_prob.data.cpu().numpy()
+        if 'cuda'  in y_pred_prob.device.type:
+            y_test_numpy = y_test.data.cpu().numpy()
+            y_pred_prob_numpy = y_pred_prob.data.cpu().numpy()
+        else:
+            y_test_numpy = y_test.data.numpy()
+            y_pred_prob_numpy = y_pred_prob.data.numpy()
     
         auroc, auprc = binary_acc_core(y_test_numpy, y_pred_prob_numpy)
         # old way to cal acc:
@@ -95,4 +106,5 @@ def binary_acc(y_preds, y_tests, beta=2):
         gbetas.append(gbeta)
         aurocs.append(auroc)
         auprcs.append(auprc)
+    #return accs, fbetas, fmeasures, gbetas, aurocs, auprcs
     return np.mean(accs), np.mean(fbetas), np.mean(fmeasures), np.mean(gbetas), np.mean(aurocs), np.mean(auprcs)

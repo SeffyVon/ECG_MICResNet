@@ -249,6 +249,7 @@ def compute_beta_score(labels, output, beta, num_classes, check_errors=True):
     accuracy = float(accuracy)/float(num_classes)
 
 
+    #return accuracy_l,fmeasure_l,fbeta_l,gbeta_l
     return accuracy,f_measure,f_beta,g_beta
 
     

@@ -2,11 +2,9 @@
 
 import numpy as np
 import joblib
-from get_12ECG_features import get_12ECG_features
 import torch
 from torchvision import transforms
 from source.myeval import agg_y_preds
-import matplotlib.pyplot as plt
 import torchvision, torch
 from PIL import Image
 
@@ -86,16 +84,6 @@ def butter_bandpass(lowcut, highcut, fs, order=5, vis=False):
     low = lowcut / nyq # lowcut * 2 / fs
     high = highcut / nyq
     b, a = signal.butter(order, [low, high], btype='band')
-    # visualize the filter
-    if vis:
-        w, h = signal.freqz(b, a, worN=2000)
-        plt.plot((fs * 0.5 / np.pi) * w, abs(h), label="order = %d" % order) # fs / (2 * pi)
-        plt.title('Butterworth filter frequency response')
-        plt.xlabel('Frequency (Hz)')
-        plt.ylabel('Gain')
-        plt.margins(0, 0.1)
-        plt.grid(which='both', axis='both')
-        plt.axvline(low, color='green') # cutoff frequency
     return b, a
 
 def butter_bandpass_filter(data, lowcut, highcut, fs, order=5):

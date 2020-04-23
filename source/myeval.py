@@ -64,7 +64,7 @@ def agg_y_preds(y_preds):
     
     return y_pred_prob_max, y_pred_prob_mean
     
-def binary_acc(y_preds, y_tests, beta=2):
+def binary_acc_mic(y_preds, y_tests, beta=2):
     accs = []
     fmeasures = []
     fbetas = []
@@ -75,7 +75,57 @@ def binary_acc(y_preds, y_tests, beta=2):
         y_pred, y_test = y_preds[:,i], y_tests[:,i]
         
         # prob
-        y_pred_prob = torch.sigmoid(y_pred)
+        if 'cuda'  in y_pred.device.type:
+            y_test_numpy = y_test.data.cpu().numpy()
+            y_pred_prob_numpy = y_pred.data.cpu().numpy()
+        else:
+            y_test_numpy = y_test.data.numpy()
+            y_pred_prob_numpy = y_pred.data.numpy()
+    
+        auroc, auprc = binary_acc_core(y_test_numpy, y_pred_prob_numpy)
+        # old way to cal acc:
+        #correct_results_sum = (y_pred_tag == y_test).sum().float()
+        #acc = true_positives/y_test.shape[0]
+        #acc = torch.round(acc * 100)
+        
+        y_pred_tag = torch.round(y_pred_prob)
+        tp, fp, tn, fn = confusion(y_pred_tag, y_test)
+
+        # acc, fmeasure, fbeta, gbeta
+        acc = float(tp + tn) / float(tp + fp + fn + tn) if (tp + fp + fn + tn) > 0 else 1.0
+        fmeasure = float(2 * tp) / float(2 * tp + fp + fn) if (2 * tp + fp + fn) > 0 else 1.0
+        fbeta = float((1+beta**2)* tp) / float(((1+beta**2)*tp) + (fn*beta**2) + fp) if ((1+beta**2)*tp) + (fn*beta**2) + fp > 0 else 1.0
+        gbeta = float(tp) / float(tp + fp + beta*fn) if tp + fp + beta*fn > 0 else 1.0
+    
+
+        accs.append(acc)#.data.cpu().numpy())
+        fbetas.append(fbeta)#.data.cpu().numpy())
+        fmeasures.append(fmeasure)
+        gbetas.append(gbeta)
+        aurocs.append(auroc)
+        auprcs.append(auprc)
+    #return accs, fbetas, fmeasures, gbetas, aurocs, auprcs
+    return np.mean(accs), np.mean(fbetas), np.mean(fmeasures), np.mean(gbetas), np.mean(aurocs), np.mean(auprcs)
+
+def binary_acc(y_preds, y_tests, beta=2):
+    accs = []
+    fmeasures = []
+    fbetas = []
+    gbetas = []
+    aurocs = []
+    auprcs = []
+    for i in range(9):
+        
+        # Tensor
+        y_pred_prob, y_test = y_preds[:,i], y_tests[:,i]
+        
+        y_pred_tag = torch.round(y_pred_prob)
+        tp, fp, tn, fn = confusion(y_pred_tag, y_test)
+        
+        
+        # numpy array 
+        y_test_numpy = None
+        y_pred_prob_numpy = None
         
         if 'cuda'  in y_pred_prob.device.type:
             y_test_numpy = y_test.data.cpu().numpy()
@@ -90,14 +140,12 @@ def binary_acc(y_preds, y_tests, beta=2):
         #acc = true_positives/y_test.shape[0]
         #acc = torch.round(acc * 100)
         
-        y_pred_tag = torch.round(y_pred_prob)
-        tp, fp, tn, fn = confusion(y_pred_tag, y_test)
 
         # acc, fmeasure, fbeta, gbeta
-        acc = float(tp + tn) / float(tp + fp + fn + tn)
-        fmeasure = float(2 * tp) / float(2 * tp + fp + fn)
-        fbeta = float((1+beta**2)* tp) / float(((1+beta**2)*tp) + (fn*beta**2) + fp)
-        gbeta = float(tp) / float(tp + fp + beta*fn)
+        acc = float(tp + tn) / float(tp + fp + fn + tn) if (tp + fp + fn + tn) > 0 else 1.0
+        fmeasure = float(2 * tp) / float(2 * tp + fp + fn) if (2 * tp + fp + fn) > 0 else 1.0
+        fbeta = float((1+beta**2)* tp) / float(((1+beta**2)*tp) + (fn*beta**2) + fp) if ((1+beta**2)*tp) + (fn*beta**2) + fp > 0 else 1.0
+        gbeta = float(tp) / float(tp + fp + beta*fn) if tp + fp + beta*fn > 0 else 1.0
     
 
         accs.append(acc)#.data.cpu().numpy())

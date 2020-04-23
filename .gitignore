@@ -6,6 +6,7 @@ output/*
 *.sav
 __pycache__/*
 saved/*
+input/*
 *.txt
 *.pyc
 *.csv

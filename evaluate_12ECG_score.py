@@ -70,6 +70,7 @@ def evaluate_12ECG_score(label_directory, output_directory):
     output_files = sorted(output_files)
 
     if len(label_files) != len(output_files):
+        print(len(label_files), len(output_files))
         raise Exception('Numbers of label and output files must be the same.')
 
     classes = get_classes(label_files)
@@ -86,7 +87,7 @@ def evaluate_12ECG_score(label_directory, output_directory):
             tmp_data = f.readlines()
         recording_output = tmp_data[0]
         classes_output = tmp_data[1].split(',')
-        single_recording_output = np.array(tmp_data[2].split(','),np.int)
+        single_recording_output = np.array(tmp_data[2].split(','),np.int) #float64.astype(int)
         single_probabilities_output = np.array(tmp_data[3].split(','),np.float64)
 
        # Check labels and output for errors.
@@ -394,7 +395,7 @@ def compute_auc(labels, probabilities, num_classes, check_errors=True):
 
 if __name__ == '__main__':
 
-    label_directory = 'Training_WFDB'
+    label_directory = 'input'
     output_directory = 'output'
     score_directory  = 'scores0.csv'
     auroc,auprc,accuracy,f_measure,f_beta,g_beta = evaluate_12ECG_score(label_directory, output_directory)

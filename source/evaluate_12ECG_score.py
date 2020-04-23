@@ -395,8 +395,8 @@ def compute_auc(labels, probabilities, num_classes, check_errors=True):
 
 if __name__ == '__main__':
 
-    label_directory = 'Training_WFDB'
-    output_directory = 'output'
+    label_directory = 'input/'
+    output_directory = 'output/'
     score_directory  = 'scores0.csv'
     auroc,auprc,accuracy,f_measure,f_beta,g_beta = evaluate_12ECG_score(label_directory, output_directory)
 

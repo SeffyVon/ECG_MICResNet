@@ -3,6 +3,8 @@
 import numpy as np, os, sys
 from scipy.io import loadmat
 from run_12ECG_classifier import load_12ECG_model, run_12ECG_classifier
+from shutil import copyfile
+
 
 def load_challenge_data(filename):
 
@@ -34,8 +36,7 @@ def save_challenge_predictions(output_directory,filename,scores,labels,classes):
 
     with open(output_file, 'w') as f:
         f.write(recording_string + '\n' + class_string + '\n' + label_string + '\n' + score_string + '\n')
-
-  
+        
 # Find unique number of classes  
 def get_classes(input_directory,files):
 
@@ -79,13 +80,21 @@ if __name__ == '__main__':
     print('Extracting 12ECG features...')
     num_files = len(input_files)
 
+    test_ptIDs = np.load('source/fold0ptIDs.npy', allow_pickle=True)
+    
     for i, f in enumerate(input_files):
-        print('    {}/{}...'.format(i+1, num_files), f)
+        print('    {}/{}...'.format(i+1, num_files))
         tmp_input_file = os.path.join(input_directory,f)
         data,header_data = load_challenge_data(tmp_input_file)
-        current_label, current_score = run_12ECG_classifier(data,header_data,classes, model)
-        # Save results.
-        save_challenge_predictions(output_directory,f,current_score,current_label,classes)
+        
+        tmp_hea = header_data[0].split(' ')
+        ptID = tmp_hea[0]
+        if ptID in test_ptIDs:
+            #current_label, current_score = run_12ECG_classifier(data,header_data,classes, model)
+            # Save results.
 
-
+            #save_challenge_predictions(output_directory,f,current_score,current_label,classes)
+            copyfile(input_directory+'/'+f, 'input/'+f)
+            g = f.replace('.mat','.hea')
+            copyfile(input_directory+'/'+g, 'input/'+g)
     print('Done.')

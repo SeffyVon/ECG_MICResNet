@@ -96,6 +96,7 @@ def evaluate_12ECG_score(label_directory, output_directory):
             raise Exception('Numbers of classes for a file must be the same.')
         
         if not (len(single_recording_labels) == len(single_recording_output) == len(single_probabilities_output)):
+            print(k, len(single_recording_labels), len(single_recording_output), len(single_probabilities_output))
             raise Exception('Numbers of labels and output for a file must be the same.')
 
         labels.append(single_recording_labels)

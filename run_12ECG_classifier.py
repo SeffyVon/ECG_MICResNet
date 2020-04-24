@@ -15,7 +15,7 @@ class MultiCWTNet(nn.Module):
     def __init__(self, device, verbose=False):
         super(MultiCWTNet, self).__init__()
         
-        self.resnet = models.resnet50(pretrained=True)
+        self.resnet = models.resnet50(pretrained=False)
         self.resnet.conv1 = self.increase_channels(self.resnet.conv1, num_channels=12, copy_weights=0)
         num_ftrs = self.resnet.fc.in_features
         self.resnet.fc = nn.Linear(num_ftrs, 9)

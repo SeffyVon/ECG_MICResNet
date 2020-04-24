@@ -93,6 +93,7 @@ if __name__ == '__main__':
             #current_label, current_score = run_12ECG_classifier(data,header_data,classes, model)
             # Save results.
             #save_challenge_predictions(output_directory,f,current_score,current_label,classes)
+            copyfile(input_directory+'/'+f, 'input/'+f)
             g = f.replace('.mat','.hea')
             copyfile(input_directory+'/'+g, 'input/'+g)
     print('Done.')

@@ -71,7 +71,11 @@ def cwt(signals, width):
     coef_norms = []
     for chn in list(range(12)):
         coef, freqs = pywt.cwt(signals[chn], scales, wavelet_type, delta_t)
-        coef_norm = (coef-np.min(coef))/(np.max(coef) - np.min(coef))
+        coef_norm = None
+        if (np.max(coef) - np.min(coef)) != 0:
+            coef_norm = (coef-np.min(coef))/(np.max(coef) - np.min(coef))
+        else:
+            coef_norm = np.zeros(coef.shape)
         coef_norms.append(coef_norm)
         
     return np.array(coef_norms)
@@ -159,7 +163,7 @@ def run_12ECG_classifier(data,header_data,classes,model):
             imgs_tensors.append(imgs_tensor)
         imgs_tensors = torch.stack(imgs_tensors)
         output = model(imgs_tensors)
-        y_prob_tensor, _ = agg_y_preds(output)
+        _, y_prob_tensor = agg_y_preds(output)
         current_score = y_prob_tensor.data.numpy()
         current_label = np.round(current_score).astype(int)
 

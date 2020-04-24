@@ -132,7 +132,7 @@ def get_image(data):
                   resize(data_img2), 
                   resize(data_img3)]
     
-    n_segments = 5
+    n_segments = 11 # 3rd submission
     shift_len = int((data_imgs[0].size[0]-224) / (n_segments-1))
     imgs = []
     for i in range(n_segments):
@@ -153,7 +153,7 @@ transform =  transforms.Compose([
 
 def run_12ECG_classifier(data,header_data,classes,model):
     data_imgs = get_image(data)
-    n_segments = 5
+    n_segments = 11 # 3rd submission
     with torch.no_grad():
         model.eval()
         imgs_tensors = []
@@ -185,6 +185,7 @@ def load_cwt_nn_model(model_saved_path):
 
 def load_12ECG_model():
     # load the model from disk 
-    model_saved_path = 'saved/modelMultiCWTFull/MutliCWTNetFull0_model.dict' 
+    model_saved_path = 'saved/modelMultiCWTFull/all_model_19.dict' # 3rd submission
+    #'saved/modelMultiCWTFull/MutliCWTNetFull0_model.dict' # 1st and 2nd submission
     model = load_cwt_nn_model(model_saved_path)
     return model

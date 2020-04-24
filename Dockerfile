@@ -8,10 +8,10 @@ COPY ./ /physionet
 WORKDIR /physionet
 
 ## Install your dependencies here using apt-get etc.
-RUN curl -s https://packagecloud.io/install/repositories/github/git-lfs/script.deb.sh | bash; \
- apt-get install git-lfs; \
- git lfs install; \
- git lfs pull
+#RUN curl -s https://packagecloud.io/install/repositories/github/git-lfs/script.deb.sh | bash; \
+# apt-get install git-lfs; \
+# git lfs install; \
+# git lfs pull
 
 ## Do not edit if you have a requirements.txt
 RUN pip install -r requirements.txt

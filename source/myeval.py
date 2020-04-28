@@ -294,12 +294,20 @@ def binary_acc_core(y_test_numpy, y_pred_prob_numpy):
     # binary result
     return auroc, auprc
 
-def agg_y_preds(y_preds):
-    y_pred_probs = torch.sigmoid(y_preds)
+def agg_y_preds(outputs):
+    y_pred_probs = torch.sigmoid(outputs)
     y_pred_prob_max, _ = torch.max(y_pred_probs, axis=0)
     y_pred_prob_mean = torch.mean(y_pred_probs, axis=0)
     
     return y_pred_prob_max, y_pred_prob_mean
+
+def agg_y_preds_bags(ys, bag_size):
+    n_bags = int(len(ys)/bag_size)
+    ys_bags_mean = [torch.mean(ys[i*bag_size:i*bag_size+bag_size], axis=0) for i in range(n_bags)]
+    ys_bags_max = [torch.max(ys[i*bag_size:i*bag_size+bag_size], axis=0)[0] for i in range(n_bags)]
+    ys_bags_first = [ys[i*bag_size] for i in range(n_bags)]
+    
+    return torch.stack(ys_bags_max, axis=0), torch.stack(ys_bags_mean, axis=0), torch.stack(ys_bags_first, axis=0)
     
 def binary_acc_mic(y_preds, y_tests, beta=2):
     accs = []

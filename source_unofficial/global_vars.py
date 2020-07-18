@@ -5,7 +5,6 @@ Created on Sun Apr  5 12:49:01 2020
 
 @author: mac
 """
-import numpy as np
 
 headers = ['Age', 'Sex', 'Dx']  
 lead_feature_names = ['mean_RR','mean_Peaks','median_RR','median_Peaks','std_RR',
@@ -19,15 +18,4 @@ for ll in leads:
 	for lfn in lead_feature_names:
 		headers.append('{}_{}'.format(ll, lfn))
 
-#labels = ['AF', 'I-AVB', 'LBBB', 'Normal', 'PAC', 'PVC', 'RBBB', 'STD', 'STE']
-
-import pandas as pd
-weights_csv = pd.read_csv('../evaluation/weights.csv')
-columns = [int(idx) for idx in weights_csv.keys()[1:]]
-weights = weights_csv.iloc[:,1:].to_numpy()
-sorted_idx = np.argsort(columns)
-weights = weights_csv.iloc[sorted_idx,sorted_idx+1]
-columns = np.array(columns)[sorted_idx]
-
-Dx_map = pd.read_csv('../evaluation/dx_mapping_scored.csv')
-labels = Dx_map['SNOMED CT Code']
+labels = ['AF', 'I-AVB', 'LBBB', 'Normal', 'PAC', 'PVC', 'RBBB', 'STD', 'STE']

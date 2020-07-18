@@ -80,7 +80,7 @@ if __name__ == '__main__':
     print('Extracting 12ECG features...')
     num_files = len(input_files)
 
-    test_ptIDs = np.load('source/fold0ptIDs.npy', allow_pickle=True)
+    test_ptIDs = np.load('fold0ptIDs.npy', allow_pickle=True)
     
     for i, f in enumerate(input_files):
         print('    {}/{}...'.format(i+1, num_files))

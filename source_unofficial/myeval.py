@@ -1,160 +1,7 @@
-#!/usr/bin/env python
-
-# This file contains functions for evaluating algorithms for the 2020 PhysioNet/
-# CinC Challenge. You can run it as follows:
-#
-#   python evaluate_12ECG_score.py labels output scores.csv
-#
-# where 'labels' is a directory containing files with labels, 'output' is a
-# directory containing files with output labels from your model, a
-# and 'scores.csv' (optional) is a collection of scores for the output.
-
-################################################################################
-
-# The evaluate_scores function computes a Fbeta measure and a generalizatoin of
-# the Jaccard measure but giving missed diagnosis twice as much weight as
-# correct diagnoses and false alarms
-#
-# Inputs:
-#   'label_directory' is a directory of comma-delimited text files containing
-#   vector of the true labels
-#
-#   'output_directory' is a directory of comma-delimited text files, where
-#   the first row of the file is the output label for each class and
-#   the second row of the file is the probability of the class label. 
-#   Note that there must be an output/value for every label.
-#
-# Outputs:
-#
-#   'fbeta_measure' is Fbeta-measure, with beta = 2
-#
-#   'Gbeta_score' is a generalization of the Jaccard measures but giving missed 
-#   diagnoses twice as much weight as correct diagnoses and false alarms, beta = 2
-#
-#   'accuracy' is accuracy.
-#
-#   'f_measure' is F-measure.
-#
-#
-# Example:
-#   Omitted due to length. See the below examples.
-
-import numpy as np, os, os.path, sys
-
-
-def evaluate_12ECG_score(label_directory, output_directory):
-
-    # Set parameters.
-    label_header       = '12ECGLabel'
-    output_label_header  = 'OutputLabel'
-    output_probability_header = 'OutputProbability'
-
-    beta = 2
-    labels=[]
-    output=[]
-    output_probabilities=[]
-
-    # Find label and output files.
-    label_files = []
-    for f in os.listdir(label_directory):
-        g = os.path.join(label_directory, f)
-        if os.path.isfile(g) and not f.lower().startswith('.') and f.lower().endswith('hea'):
-            label_files.append(g)
-    label_files = sorted(label_files)
-
-    output_files = []
-    for f in os.listdir(output_directory):
-        g = os.path.join(output_directory, f)
-        if os.path.isfile(g) and not f.lower().startswith('.') and f.lower().endswith('csv'):
-            output_files.append(g)
-    output_files = sorted(output_files)
-
-    if len(label_files) != len(output_files):
-        print(len(label_files), len(output_files))
-        raise Exception('Numbers of label and output files must be the same.')
-
-    classes = get_classes(label_files)
-
-
-    # Load labels and outputs.
-    num_files = len(label_files)
-
-    for k in range(num_files):
-
-        recording_label,classes_label,single_recording_labels=get_true_labels(label_files[k],classes)
-        
-        with open(output_files[k],'r') as f:
-            tmp_data = f.readlines()
-        recording_output = tmp_data[0]
-        classes_output = tmp_data[1].split(',')
-        single_recording_output = np.array(tmp_data[2].split(','),np.int) #float64.astype(int)
-        single_probabilities_output = np.array(tmp_data[3].split(','),np.float64)
-
-       # Check labels and output for errors.
-
-        if not (len(classes_label) == len(classes_output)):
-            raise Exception('Numbers of classes for a file must be the same.')
-        
-        if not (len(single_recording_labels) == len(single_recording_output) == len(single_probabilities_output)):
-            print(k, len(single_recording_labels), len(single_recording_output), len(single_probabilities_output))
-            raise Exception('Numbers of labels and output for a file must be the same.')
-
-        labels.append(single_recording_labels)
-        output.append(single_recording_output)
-        output_probabilities.append(single_probabilities_output)
-
-    labels=np.array(labels)
-    output=np.array(output)
-    output_probabilities=np.array(output_probabilities)
-
-    num_classes = len(classes_label)
-
-    # Compute F_beta measure and the generalization of the Jaccard index
-    accuracy,f_measure,Fbeta_measure,Gbeta_measure = compute_beta_score(labels, output, beta, num_classes)
-
-    # compute AUROC and AUPRC
-    auroc,auprc = compute_auc(labels, output_probabilities,num_classes)
-
-    return auroc,auprc,accuracy,f_measure,Fbeta_measure,Gbeta_measure
-
-
-# Find unique number of classes
-def get_classes(files):
-
-    classes=set()
-    for input_file in files:
-        with open(input_file,'r') as f:
-            for lines in f:
-                if lines.startswith('#Dx'):
-                    tmp = lines.split(': ')[1].split(',')
-                    for c in tmp:
-                        classes.add(c.strip())
-
-    return sorted(classes)
-
-
-
-# Find unique true labels
-def get_true_labels(input_file,classes):
-
-    classes_label = classes
-    single_recording_labels=np.zeros(len(classes),dtype=int)
-
-
-    with open(input_file,'r') as f:
-        first_line = f.readline()
-        recording_label=first_line.split(' ')[0]
-        print(recording_label)
-        for lines in f:
-            if lines.startswith('#Dx'):
-                tmp = lines.split(': ')[1].split(',')
-                for c in tmp:
-                    idx = classes.index(c.strip())
-                    single_recording_labels[idx]=1
-
-    return recording_label,classes_label,single_recording_labels
-
-
+#%%
+import torch
+import numpy as np
+from sklearn.metrics import roc_auc_score, precision_recall_curve, auc
 
 
 
@@ -394,14 +241,163 @@ def compute_auc(labels, probabilities, num_classes, check_errors=True):
 
 
 
-if __name__ == '__main__':
+# def evaluate_beta(output, y):
+    
+#     accuracy,f_measure,f_beta,g_beta = compute_beta_score(labels=y, 
+#                        output=output, 
+#                        beta=2, num_classes=1)
+    
+#     auroc, auprc = compute_auc(labels=y, 
+#                                 probabilities=output,
+#                                 num_classes=1)
 
-    label_directory = 'input'
-    output_directory = 'output'
-    score_directory  = 'scores0.csv'
-    auroc,auprc,accuracy,f_measure,f_beta,g_beta = evaluate_12ECG_score(label_directory, output_directory)
+#     return accuracy,f_measure,f_beta,g_beta, auroc, auprc
 
-    output_string = 'AUROC|AUPRC|Accuracy|F-measure|Fbeta-measure|Gbeta-measure\n{:.3f}|{:.3f}|{:.3f}|{:.3f}|{:.3f}|{:.3f}'.format(auroc,auprc,accuracy,f_measure,f_beta,g_beta)
-    with open(score_directory, 'w') as f:
-        f.write(output_string)
-    print(output_string)
+
+def confusion(prediction, truth):
+    
+    """ Returns the confusion matrix for the values in the `prediction` and `truth`
+    tensors, i.e. the amount of positions where the values of `prediction`
+    and `truth` are
+    - 1 and 1 (True Positive)
+    - 1 and 0 (False Positive)
+    - 0 and 0 (True Negative)
+    - 0 and 1 (False Negative)
+    https://gist.github.com/the-bass/cae9f3976866776dea17a5049013258d
+    """
+
+    confusion_vector = prediction / truth
+    # Element-wise division of the 2 tensors returns a new tensor which holds a
+    # unique value for each case:
+    #   1     where prediction and truth are 1 (True Positive)
+    #   inf   where prediction is 1 and truth is 0 (False Positive)
+    #   nan   where prediction and truth are 0 (True Negative)
+    #   0     where prediction is 0 and truth is 1 (False Negative)
+
+    true_positives = torch.sum(confusion_vector == 1).item()
+    false_positives = torch.sum(confusion_vector == float('inf')).item()
+    true_negatives = torch.sum(torch.isnan(confusion_vector)).item()
+    false_negatives = torch.sum(confusion_vector == 0).item()
+
+    return true_positives, false_positives, true_negatives, false_negatives
+
+
+def binary_acc_core(y_test_numpy, y_pred_prob_numpy):
+    # auroc
+
+    auroc = roc_auc_score(y_test_numpy, y_pred_prob_numpy)
+
+    # auprc
+    precision, recall, thresholds = precision_recall_curve(y_test_numpy, y_pred_prob_numpy)
+    auprc = auc(recall, precision)
+
+    # binary result
+    return auroc, auprc
+
+def agg_y_preds(outputs):
+    y_pred_probs = torch.sigmoid(outputs)
+    y_pred_prob_max, _ = torch.max(y_pred_probs, axis=0)
+    y_pred_prob_mean = torch.mean(y_pred_probs, axis=0)
+    
+    return y_pred_prob_max, y_pred_prob_mean
+
+def agg_y_preds_bags(ys, bag_size):
+    n_bags = int(len(ys)/bag_size)
+    ys_bags_mean = [torch.mean(ys[i*bag_size:i*bag_size+bag_size], axis=0) for i in range(n_bags)]
+    ys_bags_max = [torch.max(ys[i*bag_size:i*bag_size+bag_size], axis=0)[0] for i in range(n_bags)]
+    ys_bags_first = [ys[i*bag_size] for i in range(n_bags)]
+    
+    return torch.stack(ys_bags_max, axis=0), torch.stack(ys_bags_mean, axis=0), torch.stack(ys_bags_first, axis=0)
+    
+def binary_acc_mic(y_preds, y_tests, beta=2):
+    accs = []
+    fmeasures = []
+    fbetas = []
+    gbetas = []
+    aurocs = []
+    auprcs = []
+    for i in range(9):
+        y_pred, y_test = y_preds[:,i], y_tests[:,i]
+        
+        # prob
+        if 'cuda'  in y_pred.device.type:
+            y_test_numpy = y_test.data.cpu().numpy()
+            y_pred_prob_numpy = y_pred.data.cpu().numpy()
+        else:
+            y_test_numpy = y_test.data.numpy()
+            y_pred_prob_numpy = y_pred.data.numpy()
+    
+        auroc, auprc = binary_acc_core(y_test_numpy, y_pred_prob_numpy)
+        # old way to cal acc:
+        #correct_results_sum = (y_pred_tag == y_test).sum().float()
+        #acc = true_positives/y_test.shape[0]
+        #acc = torch.round(acc * 100)
+        
+        y_pred_tag = torch.round(y_pred_prob)
+        tp, fp, tn, fn = confusion(y_pred_tag, y_test)
+
+        # acc, fmeasure, fbeta, gbeta
+        acc = float(tp + tn) / float(tp + fp + fn + tn) if (tp + fp + fn + tn) > 0 else 1.0
+        fmeasure = float(2 * tp) / float(2 * tp + fp + fn) if (2 * tp + fp + fn) > 0 else 1.0
+        fbeta = float((1+beta**2)* tp) / float(((1+beta**2)*tp) + (fn*beta**2) + fp) if ((1+beta**2)*tp) + (fn*beta**2) + fp > 0 else 1.0
+        gbeta = float(tp) / float(tp + fp + beta*fn) if tp + fp + beta*fn > 0 else 1.0
+    
+
+        accs.append(acc)#.data.cpu().numpy())
+        fbetas.append(fbeta)#.data.cpu().numpy())
+        fmeasures.append(fmeasure)
+        gbetas.append(gbeta)
+        aurocs.append(auroc)
+        auprcs.append(auprc)
+    #return accs, fbetas, fmeasures, gbetas, aurocs, auprcs
+    return np.mean(accs), np.mean(fbetas), np.mean(fmeasures), np.mean(gbetas), np.mean(aurocs), np.mean(auprcs)
+
+def binary_acc(y_preds, y_tests, beta=2):
+    accs = []
+    fmeasures = []
+    fbetas = []
+    gbetas = []
+    aurocs = []
+    auprcs = []
+    for i in range(9):
+        
+        # Tensor
+        y_pred_prob, y_test = y_preds[:,i], y_tests[:,i]
+        
+        y_pred_tag = torch.round(y_pred_prob)
+        tp, fp, tn, fn = confusion(y_pred_tag, y_test)
+        
+        
+        # numpy array 
+        y_test_numpy = None
+        y_pred_prob_numpy = None
+        
+        if 'cuda'  in y_pred_prob.device.type:
+            y_test_numpy = y_test.data.cpu().numpy()
+            y_pred_prob_numpy = y_pred_prob.data.cpu().numpy()
+        else:
+            y_test_numpy = y_test.data.numpy()
+            y_pred_prob_numpy = y_pred_prob.data.numpy()
+    
+        auroc, auprc = binary_acc_core(y_test_numpy, y_pred_prob_numpy)
+        # old way to cal acc:
+        #correct_results_sum = (y_pred_tag == y_test).sum().float()
+        #acc = true_positives/y_test.shape[0]
+        #acc = torch.round(acc * 100)
+        
+
+        # acc, fmeasure, fbeta, gbeta
+        acc = float(tp + tn) / float(tp + fp + fn + tn) if (tp + fp + fn + tn) > 0 else 1.0
+        fmeasure = float(2 * tp) / float(2 * tp + fp + fn) if (2 * tp + fp + fn) > 0 else 1.0
+        fbeta = float((1+beta**2)* tp) / float(((1+beta**2)*tp) + (fn*beta**2) + fp) if ((1+beta**2)*tp) + (fn*beta**2) + fp > 0 else 1.0
+        gbeta = float(tp) / float(tp + fp + beta*fn) if tp + fp + beta*fn > 0 else 1.0
+    
+
+        accs.append(acc)#.data.cpu().numpy())
+        fbetas.append(fbeta)#.data.cpu().numpy())
+        fmeasures.append(fmeasure)
+        gbetas.append(gbeta)
+        aurocs.append(auroc)
+        auprcs.append(auprc)
+    #return accs, fbetas, fmeasures, gbetas, aurocs, auprcs
+    return np.mean(accs), np.mean(fbetas), np.mean(fmeasures), np.mean(gbetas), np.mean(aurocs), np.mean(auprcs)

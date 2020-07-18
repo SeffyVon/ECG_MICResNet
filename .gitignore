@@ -13,3 +13,5 @@ input/*
 *.pkl
 *.npy
 *.png
+evaluation/
+Data/

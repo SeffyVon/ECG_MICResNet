@@ -32,3 +32,5 @@ columns = np.array(columns)[sorted_idx]
 Dx_map = pd.read_csv('../evaluation/dx_mapping_scored.csv')
 Dx_map_unscored = pd.read_csv('../evaluation/dx_mapping_unscored.csv')
 labels = Dx_map['SNOMED CT Code']
+
+

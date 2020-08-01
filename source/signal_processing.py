@@ -210,25 +210,92 @@ def remove_QRS(filtered_ecg, Q_loc, S_loc, verbose=False):
         
     return ecg_no_QRS, end
 
+from scipy.signal import find_peaks
+
+def find_AD(ecg_12leads, vis=False):
+    """
+    LAD = False
+    RAD = False
+    if R_V1 > 0 and R_aVF > 0:
+        pass
+    elif R_V1 > 0 and R_aVF < 0:
+        LAD = True
+    elif R_V1 < 0 and R_aVF > 0:
+        RAD = True
+    """
+    diagnosis = "Normal"
+    peak_indices = {}
+
+    for i in [0,1,5]:    
+        peak_indices[i],_ = find_peaks(np.abs(ecg_12leads[i,:]), height=np.percentile(np.abs(ecg_12leads[i,:]), 99))
+        if vis:
+            plt.plot(ecg_12leads[i,:], c='C{}'.format(i))
+            plt.scatter(peak_indices[i], ecg_12leads[i,peak_indices[i]], c='C{}'.format(i))
+            plt.show()
+            plt.close()
+
+    pos_R_I = True if np.sum(ecg_12leads[0,peak_indices[0]] > 0) > np.sum(ecg_12leads[0,peak_indices[0]] < 0) else False
+    pos_R_II = True if np.sum(ecg_12leads[0,peak_indices[1]] > 0) > np.sum(ecg_12leads[0,peak_indices[1]] < 0) else False
+    pos_R_aVF = True if np.sum(ecg_12leads[5,peak_indices[5]] > 0) > np.sum(ecg_12leads[5,peak_indices[5]] < 0) else False
+
+    if not pos_R_I and pos_R_aVF :
+        diagnosis = 'RAD'
+    elif pos_R_I and (not pos_R_aVF or not pos_R_II):
+        diagnosis = 'LAD'
+    return diagnosis
+
+from itertools import groupby
+from operator import itemgetter
+
 def extract_QRST(ecg_12leads, vis=False, vis_res=False, only_qrs=False, verbose=False,
-                 filter_twice=False, qrs_chn=10, code=None, title=None):
+                 filter_twice=False, qrs_chn=12, code=None, title=None):
     """
     To extract the QRST.
     Cannot cope with the negative R yet!
-    """
-    # transverse plane
-    #transverse_leads = PCA(2).fit_transform(ecg_12leads[6:,:].transpose()).transpose() # ecg_12leads[[7, 12],:]
-    # frontal plane
-    frontal_leads = PCA(2).fit_transform(ecg_12leads[:6,:].transpose()).transpose() # ecg_12leads[[0, 5],:]
-    # 3D space
-    #three_leads =  ecg_12leads[[0, 5, 7],:] #PCA(3).fit_transform(ecg_12leads.transpose()).transpose() #
     
-    filtered_ecg = ecg_12leads[qrs_chn,:] if qrs_chn != 12 else \
-        np.sqrt(frontal_leads[0,:]**2 + frontal_leads[1,:]**2) * np.sign(frontal_leads[0,:]) * np.sign(frontal_leads[1,:])
+    """
+
+    filtered_ecg = None
+    filtered_ecg2 = None
+    if qrs_chn == 12:
+        # frontal leads
+        filtered_ecg = PCA(1).fit_transform(ecg_12leads[:3,:].transpose()).flatten() 
+        peak_indices,_ = find_peaks(np.abs(filtered_ecg), height=np.percentile(np.abs(filtered_ecg), 98))
+        if vis:
+            plt.plot(filtered_ecg)
+            plt.scatter(peak_indices, filtered_ecg[peak_indices])
+            plt.show()
+            plt.close()
+
+        sign = 1 if np.sum(filtered_ecg[peak_indices] > 0) > np.sum(filtered_ecg[peak_indices] < 0) else -1
+        filtered_ecg *= sign
+        
+        
+        # all leads
+        filtered_ecg2 = None
+#         if np.sum(ecg_12leads[[7,8],:]) != 0:
+#             filtered_ecg2 = PCA(1).fit_transform(ecg_12leads[[7,8],:].transpose()).flatten() 
+#         else:
+#             
+        filtered_ecg2 = PCA(1).fit_transform(ecg_12leads[[0,1],:].transpose()).flatten() 
+            
+#         peak_indices,_ = find_peaks(np.abs(filtered_ecg2), height=np.percentile(np.abs(filtered_ecg2), 98))
+#         sign = 1 if np.sum(filtered_ecg2[peak_indices] > 0) > np.sum(filtered_ecg2[peak_indices] < 0) else -1
+#         filtered_ecg2 *= sign
+        peak_indices,_ = find_peaks(np.abs(ecg_12leads[0,:]), height=np.percentile(np.abs(ecg_12leads[0,:]), 99))
+        pos_R_I = 1 if np.sum(ecg_12leads[0,peak_indices] > 0) > np.sum(ecg_12leads[0,peak_indices] < 0) else -1
+        filtered_ecg2 = ecg_12leads[0,:] #* pos_R_I
+        
+    elif qrs_chn == 13:
+        frontal_verticle_leads =  PCA(2).fit_transform(ecg_12leads[[0, 5],:].transpose()).transpose()
+        filtered_ecg = frontal_verticle_leads[0,:] * pos_R_I * pos_R_aVF
+    else:
+        filtered_ecg = ecg_12leads[qrs_chn,:]
 
     if vis:    
         plt.figure(figsize=(15,3))
-        plt.plot(filtered_ecg)
+        plt.plot(frontal_leads.transpose())
+        plt.plot(filtered_ecg, c='black')
         plt.title('signal for QRST segmentation')
         plt.show()
         plt.close()
@@ -260,56 +327,107 @@ def extract_QRST(ecg_12leads, vis=False, vis_res=False, only_qrs=False, verbose=
     if verbose:
         print ("Q_loc:", Q_loc,"R_loc:", R_loc, "S_loc:", S_loc)
     
-    GAP_SINCE_S = 10 # 500 Hz, change 100 to 50
-    #T_start_loc = S_loc + GAP_SINCE_S 
+    GAP_SINCE_S = 0 # 500 Hz, change 100 to 50
+    
     T_peak_loc = np.zeros(len(T_start_loc)-1, dtype=int)
     T_end_loc = np.zeros(len(T_start_loc)-1, dtype=int)
     time_vars = np.zeros(ecg_12leads.shape[1])
     
+    filtered_ecg2 = butter_bandpass_filter(filtered_ecg2, lowcut=0.5, highcut=10, fs=500, order=2)
     
-    for i in range(len(T_start_loc)-1):
-
-        # from this T_start_loc to next Q
-        time_vars[T_start_loc[i]+GAP_SINCE_S:Q_loc[i+1]] = filtered_ecg[T_start_loc[i]+GAP_SINCE_S:Q_loc[i+1]]
+    # my method
+#     for i in range(len(T_start_loc)-1):
+#         time_vars[T_start_loc[i]:Q_loc[i+1]] = filtered_ecg2[T_start_loc[i]:Q_loc[i+1]]
+#         #from this T_start_loc to next Q
+        
          
-        # T peak is defined within the start to the 2/3 of the S-Q segment
-        T_peak_bound = int(1/3 * T_start_loc[i] + 2/3 * Q_loc[i+1]) 
-        if T_peak_bound <= T_start_loc[i]:
-            T_end_loc[i] = T_start_loc[i]
-            continue
-        if verbose:
-            print("T_start_loc[i]", T_start_loc[i], "T_peak_bound", T_peak_bound)
+#         # T peak is defined within the start to the 2/3 of the S-Q segment
+#         T_peak_bound = int(1/3 * T_start_loc[i] + 2/3 * Q_loc[i+1]) 
+#         if T_peak_bound <= T_start_loc[i]:
+#             T_end_loc[i] = T_start_loc[i]
+#             continue
+#         if verbose:
+#             print("T_start_loc[i]", T_start_loc[i], "T_peak_bound", T_peak_bound)
             
-        T_peak_loc[i] = np.argmax(time_vars[T_start_loc[i]:T_peak_bound]) + T_start_loc[i]
-        if verbose:
-            print("T_peak_loc", T_peak_loc[i])
+#         T_peak_loc[i] = np.argmax(time_vars[T_start_loc[i]:T_peak_bound]) + T_start_loc[i]
+#         if verbose:
+#             print("T_peak_loc", T_peak_loc[i])
 
-        # backward search for the end of the T end
-        T_end_loc[i] = T_peak_loc[i]
-        while T_end_loc[i]<Q_loc[i+1] and (time_vars[T_end_loc[i]+1]<time_vars[T_end_loc[i]]):
-            T_end_loc[i] = T_end_loc[i] + 1
-        if verbose:
-            print("T_end_loc", T_end_loc[i])
-            
-    if vis or vis_res:    
-        plt.figure(figsize=(20,10))
-        plt.plot(filtered_ecg, label="filtered ecg")
-        plt.plot(time_vars,  '--', label="time variance")
-        plt.scatter(Q_loc, filtered_ecg[Q_loc], label='Q', s=100)
-        plt.scatter(R_loc, filtered_ecg[R_loc], label='R', s=100)
-        plt.scatter(S_loc, filtered_ecg[S_loc], label='S', s=100)
-        plt.scatter(T_start_loc, filtered_ecg[T_start_loc], label='T start', marker='^', s=100)
-        plt.scatter(T_peak_loc, filtered_ecg[T_peak_loc], label='T peak', marker='^', s=100)
-        plt.scatter(T_end_loc, filtered_ecg[T_end_loc], label='T end', marker='^', s=100)
-        plt.legend(loc='best')
-        if title is not None:
-            plt.title(title) 
-        if code is not None:
-            plt.savefig('../explore/QRST/'+str(code))
-        plt.show()
+#         # backward search for the end of the T end
+#         T_end_loc[i] = T_peak_loc[i]
+#         while T_end_loc[i]<Q_loc[i+1] and (time_vars[T_end_loc[i]+1]<time_vars[T_end_loc[i]]):
+#             T_end_loc[i] = T_end_loc[i] + 1
+#         if verbose:
+#             print("T_end_loc", T_end_loc[i])
+
+    # new method
+
+    intervals = np.zeros((len(T_start_loc)-1,), dtype=int)
+    
+    RR = np.median([R_loc[i+1]-R_loc[i] for i in range(len(T_start_loc)-1)])
+    fs = 1./500
+    W1 = int(35 * fs * RR )
+    W2 = int(200 * fs * RR)
+    RTmin = int(35 * fs * RR )
+    RTmax = int(500 * fs * RR )
+
+    if verbose:
+        print("W1, W2, RTmin, RTmax", W1, W2, RTmin, RTmax)
+        
+    if vis:
+        plt.figure(figsize=(20,5))
+    
+    # T wave inversion
+    for i in range(len(T_start_loc)-1):
+        time_vars[T_start_loc[i]:Q_loc[i+1]] = filtered_ecg2[T_start_loc[i]:Q_loc[i+1]]
+    
+    T_wave_inv = False    
+#     arg_T_peak = np.argmax(np.abs(time_vars))
+#     if time_vars[arg_T_peak] < 0:
+#         T_wave_inv = True
+
+    if T_wave_inv:
+        filtered_ecg2 *= -1        
+        
+    for i in range(len(T_start_loc)-1):
+        RR = R_loc[i+1]-R_loc[i]    
+        time_vars[T_start_loc[i]:Q_loc[i+1]] = filtered_ecg2[T_start_loc[i]:Q_loc[i+1]]
+
+        MA_peak = np.convolve(time_vars, np.ones((W1,))/W1, mode='same')
+        MA_Twave = np.convolve(time_vars, np.ones((W2,))/W2, mode='same')        
+
+        roi_indices = np.argwhere(MA_peak[T_start_loc[i]:Q_loc[i+1]]>MA_Twave[T_start_loc[i]:Q_loc[i+1]]).flatten() + T_start_loc[i]
+        
+        for k,g in groupby(enumerate(roi_indices), lambda value:value[0]-value[1]):
+            grouping = list(map(itemgetter(1), g))
+            if len(grouping)>1 and intervals[i] == 0 and grouping[-1] - grouping[0] > W1:
+                if grouping[0] -  R_loc[i] > RTmin and grouping[-1]- R_loc[i] < RTmax:
+                    intervals[i] = grouping[-1] - grouping[0]
+                    T_start_loc[i] = grouping[0]
+                    T_end_loc[i] = grouping[-1]
+                    T_peak_loc[i] = np.argmax(time_vars[T_start_loc[i]: T_end_loc[i]])
+                    if vis:
+                        plt.axvspan(grouping[0], grouping[-1], alpha=0.4, color='C3')
+                elif grouping[-1]- R_loc[i] > RTmax:
+                    if vis:
+                        plt.axvspan(grouping[0], grouping[-1], alpha=0.4, color='C4')                
+
+    MA_peak = np.convolve(filtered_ecg2, np.ones((W1,))/W1, mode='same')
+    MA_Twave = np.convolve(filtered_ecg2, np.ones((W2,))/W2, mode='same')
+    
+    if vis:
+        plt.plot(filtered_ecg2, label='I, aVR post')
+        plt.plot(MA_peak, label='MA_peak')
+        plt.plot(MA_Twave, label='MA_Twave')
+        plt.scatter(Q_loc, filtered_ecg2[Q_loc], label='Q', s=100)
+        plt.scatter(R_loc, filtered_ecg2[R_loc], label='R', s=100)
+        plt.scatter(S_loc, filtered_ecg2[S_loc], label='S', s=100)
+        plt.legend()
+        #plt.savefig('../explore/QRST/'+str(code))
+        plt.show()    
         plt.close()
   
-    return Q_loc, R_loc, S_loc, T_start_loc, T_peak_loc, T_end_loc
+    return Q_loc, R_loc, S_loc, T_start_loc, T_peak_loc, T_end_loc, filtered_ecg, filtered_ecg2
 
 
 """
@@ -351,3 +469,89 @@ def cwt(signal,name='', wavelet_type = 'morl', vis=False):
         plt.close()
         
     return coefs
+
+
+def main_QRST(filtered_Data, idx, scored_code, postfix, names, vis=False):
+    
+    leads = ['I', 'II', 'III', 'aVR', 'aVL', 'aVF', 'V1', 'V2','V3','V4','V5','V6','frontal PCA-1', 'I post']
+    qrs_chn = 12
+    Q_loc, R_loc, S_loc, T_start_loc, T_peak_loc, T_end_loc, filtered_ecg, filtered_ecg2 =extract_QRST(filtered_Data, vis_res=False, vis=False, verbose=False, qrs_chn=qrs_chn,
+                   code=str(scored_code) + postfix, 
+                   title=str(idx) + ' ' + str(scored_code) + ' ' + str(leads[qrs_chn]) + ' ' + names)
+
+#     fig, axes = plt.subplots(7, 2, figsize=(20,10), sharey=False, sharex=True)
+#     lead = 0
+#     for j in range(2):
+#         for i in range(6):
+#             ax = axes[i,j]
+#             ax.plot(filtered_Data[lead,:], c='black')
+#             ax.set_ylabel(leads[lead])
+
+#             ax.scatter(Q_loc, filtered_Data[lead,:][Q_loc], label='Q', marker='^', s=50)
+#             ax.scatter(R_loc, filtered_Data[lead,:][R_loc], label='R', marker='^', s=50)
+#             ax.scatter(S_loc, filtered_Data[lead,:][S_loc], label='S', marker='^', s=50)
+
+#             ax.scatter(T_start_loc, filtered_Data[lead,:][T_start_loc], label='T_start', marker='o', s=50)
+#             ax.scatter(T_end_loc, filtered_Data[lead,:][T_end_loc], label='T_end', marker='o', s=50)
+#             lead += 1
+
+#     for i, ecg in enumerate([filtered_ecg, filtered_ecg2]):
+#         axes[6,i].plot(ecg, c='black')
+#         sc1 = axes[6,i].scatter(Q_loc, ecg[Q_loc], label='Q', marker='^', s=50)
+#         sc2 = axes[6,i].scatter(R_loc, ecg[R_loc], label='R', marker='^', s=50)
+#         sc3 = axes[6,i].scatter(S_loc, ecg[S_loc], label='S', marker='^', s=50)
+
+#         sc4 = axes[6,i].scatter(T_start_loc, ecg[T_start_loc], label='T_start', marker='o', s=50)
+#         sc5 = axes[6,i].scatter(T_end_loc, ecg[T_end_loc], label='T_end', marker='o', s=50)
+#         axes[6,i].set_ylabel(leads[12+i])
+        
+#         if i == 0:
+#             fig.legend([sc1, sc2, sc3, sc4, sc5],     # The line objects
+#                ['Q', 'R', 'S', 'T_start', 'T_end'],   # The labels for each line
+#                loc="lower center",   # Position of legend
+#                borderaxespad=0.1,    # Small spacing around legend box
+#                ncol = 5
+#                )
+
+#     plt.suptitle(str(idx) + ' ' + str(scored_code) + ' ' + str(leads[qrs_chn]) + ' ' + names)
+    
+#     if vis:
+#         plt.show()
+#     else:
+#         plt.savefig('../explore/conditions/'+str(scored_code) + postfix)
+#     plt.close()
+    
+    # segment the Q-S segment
+    
+    fig, axes = plt.subplots(6, 4, figsize=(20,10), sharey=False, sharex=False)
+    lead = 0
+    for j in range(2):
+        for i in range(6):
+            ax = axes[i,j]
+            ax.set_ylabel(leads[lead])
+            for k in range(len(Q_loc)-1):
+                ax.plot(filtered_Data[lead, Q_loc[k]:S_loc[k]])
+            lead += 1
+    lead = 0
+    for j in [2,3]:
+        for i in range(6):
+            ax = axes[i,j]
+            ax.set_ylabel(leads[lead])
+            for k in range(len(Q_loc)-1):
+                ax.plot(filtered_Data[lead, S_loc[k]:Q_loc[k+1]])
+            lead += 1  
+            
+            if lead == 1:
+                fig.legend([str(Q_loc[k]) for k in range(len(Q_loc)-1)],   # The labels for each line
+                   loc="right",   # Position of legend
+                   borderaxespad=0.1,    # Small spacing around legend box
+                   ncol = 1
+                   )
+
+    plt.suptitle(str(idx) + ' ' + str(scored_code) + ' ' + str(leads[qrs_chn]) + ' ' + names)
+    if vis:
+        plt.show()
+    else:
+        plt.savefig('../explore/QRST/'+str(scored_code) + postfix)
+    plt.close()    
+    

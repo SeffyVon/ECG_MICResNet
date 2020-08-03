@@ -95,20 +95,28 @@ def MA(x, n):
 
 from sklearn.decomposition import PCA
 
-def adjust_Q_and_S(Q_p, S_p, ecgs):
+def adjust_Q_and_S(Q_p, S_p, ecgs, R_p): # 100mV 0.002 ms
     
+    Q_p_res = []
+    S_p_res = []
     for ecg in ecgs:
         diff = np.diff(ecg)
-        diff2 = np.diff(diff)
         # Adjusting Q_loc
-        while Q_p-1 > 0 and ecg[Q_p-1] < ecg[Q_p] and (diff[Q_p-1]>0 or diff2[Q_p] < max(diff2[Q_p-1], diff2[Q_p+1])):
+        thresh = np.abs(ecg[R_p]) * 0.1
+        while Q_p-1 > 0 and ecg[Q_p-1] < ecg[Q_p] and diff[Q_p] > thresh:
             Q_p = Q_p - 1
+            
+        Q_p_res.append(Q_p)
 
         # Adjusting S_loc
-        while S_p < len(ecg)-1 and ecg[S_p+1] < ecg[S_p] and (diff[S_p-1]<0 or diff2[S_p] > min(diff2[S_p-1], diff2[S_p+1])):
+        while S_p+1 < len(ecg) and ecg[S_p+1] < ecg[S_p] and diff[S_p] < -thresh:
             S_p = S_p+1
-    #print("Q_p, S_p", Q_p, S_p)
-    return Q_p, S_p
+            
+        S_p_res.append(S_p)
+            
+    #print("Q_p, S_p", Q_p_res, S_p_res)
+   
+    return np.max(Q_p_res), np.min(S_p_res)
 
 from sklearn import mixture 
 def Pan_Tompkins_QRS(ecg, ecg2, ecg_12leads, verbose=False):
@@ -144,7 +152,7 @@ def Pan_Tompkins_QRS(ecg, ecg2, ecg_12leads, verbose=False):
         print("big_members", big_members)
     
     time = 0
-    while len(big_members) == 1 or np.max(np.diff(big_members))>2000 or big_members[0] > 2000 or len(integrated_ecg) - big_members[-1] > 2000 or len(big_members)/len(peak_indices)<0.1 :
+    while len(big_members) < 3 or np.max(np.diff(big_members))>2000 or big_members[0] > 2000 or len(integrated_ecg) - big_members[-1] > 2000 or len(big_members)/len(peak_indices)<0.05 or big_members[-1] - big_members[0] < 300: 
         time += 1
         if time > 3:
             break
@@ -244,10 +252,14 @@ def Pan_Tompkins_QRS(ecg, ecg2, ecg_12leads, verbose=False):
 
     # use a copy of filtered_ecg to record "un-inverted" filtered_ecg
     segment = ecg.copy()
+    segment2 = ecg2.copy()
+    
+    for lead in range(12):
+        ecg_12leads[lead,:] = correct_axis_ecg(ecg_12leads[lead,:])
+        
     for i in range(len(left)):
         
         segment_ecg = correct_axis_ecg(ecg[left[i]:right[i]+1])
-        #segment_ecg2 = correct_axis_ecg(ecg2[left[i]:right[i]+1])
 
         segment[left[i]:right[i]+1] = segment_ecg
 
@@ -274,7 +286,7 @@ def Pan_Tompkins_QRS(ecg, ecg2, ecg_12leads, verbose=False):
         Q_loc[i] = np.argmin(ecg[left[i]:R_loc[i]+1]) + left[i]# left - R, R_loc[i]-10 #
         S_loc[i] = np.argmin(ecg[R_loc[i]:right[i]+1]) + R_loc[i] # R-right R_loc[i]+10 #
 
-        Q_loc[i], S_loc[i] = adjust_Q_and_S(Q_loc[i], S_loc[i], [ segment])
+        Q_loc[i], S_loc[i] = adjust_Q_and_S(Q_loc[i], S_loc[i], ecg_12leads, R_loc[i])
 
     if verbose:
         print("Q locations:", Q_loc)
@@ -356,7 +368,7 @@ def correct_axis_ecg(ecg, vis=False):
     ecg *= sign
     return ecg
         
-def extract_QRST(ecg_12leads, vis=False, vis_res=False, only_qrs=False, verbose=False,
+def extract_QRST(ecg_12leads, vis=False, vis_res=False, only_qrs=True, verbose=False,
                  filter_twice=False, qrs_chn=12, code=None, title=None
                 ):
     """
@@ -369,16 +381,12 @@ def extract_QRST(ecg_12leads, vis=False, vis_res=False, only_qrs=False, verbose=
     filtered_ecg2 = None
     if qrs_chn == 12:
         # frontal leads
-        pca_res = PCA(2).fit_transform(ecg_12leads.transpose())
+        pca_res = PCA(2).fit_transform(ecg_12leads[[0,5,7],:].transpose())
         filtered_ecg = pca_res[:,0].flatten()
         filtered_ecg2 = pca_res[:,1].flatten()
         
         filtered_ecg = correct_axis_ecg(filtered_ecg)
         filtered_ecg2 = correct_axis_ecg(filtered_ecg2)
-
-    elif qrs_chn == 13:
-        frontal_verticle_leads =  PCA(2).fit_transform(ecg_12leads[[0, 5],:].transpose()).transpose()
-        filtered_ecg = frontal_verticle_leads[0,:] * pos_R_I * pos_R_aVF
     else:
         filtered_ecg = ecg_12leads[qrs_chn,:]
 
@@ -425,7 +433,7 @@ def extract_QRST(ecg_12leads, vis=False, vis_res=False, only_qrs=False, verbose=
         plt.close()
         
     if only_qrs:
-        return Q_loc, R_loc, S_loc, None, None, None
+        return Q_loc, R_loc, S_loc, None, None, None, filtered_ecg, filtered_ecg2
 
     # Now we can calculate the variance of the channels to detect the T waves :)
     _, T_start_loc = remove_QRS(filtered_ecg, Q_loc, S_loc)
@@ -470,7 +478,7 @@ def extract_QRST(ecg_12leads, vis=False, vis_res=False, only_qrs=False, verbose=
 
     intervals = np.zeros((len(T_start_loc)-1,), dtype=int)
     
-    RR = np.median([R_loc[i+1]-R_loc[i] for i in range(len(T_start_loc)-1)])
+    RR = np.median([R_loc[i+1]-R_loc[i] for i in range(len(R_loc)-1)])
     fs = 1./500
     W1 = int(35 * fs * RR )
     W2 = int(200 * fs * RR)
@@ -600,8 +608,8 @@ def main_QRST(filtered_Data, idx, scored_code, postfix, names, vis=False, verbos
                 ax.scatter(R_loc, filtered_Data[lead,:][R_loc], label='R', marker='^', s=50)
                 ax.scatter(S_loc, filtered_Data[lead,:][S_loc], label='S', marker='^', s=50)
 
-                ax.scatter(T_start_loc, filtered_Data[lead,:][T_start_loc], label='T_start', marker='o', s=50)
-                ax.scatter(T_end_loc, filtered_Data[lead,:][T_end_loc], label='T_end', marker='o', s=50)
+               # ax.scatter(T_start_loc, filtered_Data[lead,:][T_start_loc], label='T_start', marker='o', s=50)
+               # ax.scatter(T_end_loc, filtered_Data[lead,:][T_end_loc], label='T_end', marker='o', s=50)
                 lead += 1
 
         for i, ecg in enumerate([filtered_ecg, filtered_ecg2]):
@@ -610,8 +618,8 @@ def main_QRST(filtered_Data, idx, scored_code, postfix, names, vis=False, verbos
             sc2 = axes[6,i].scatter(R_loc, ecg[R_loc], label='R', marker='^', s=50)
             sc3 = axes[6,i].scatter(S_loc, ecg[S_loc], label='S', marker='^', s=50)
 
-            sc4 = axes[6,i].scatter(T_start_loc, ecg[T_start_loc], label='T_start', marker='o', s=50)
-            sc5 = axes[6,i].scatter(T_end_loc, ecg[T_end_loc], label='T_end', marker='o', s=50)
+          #  sc4 = axes[6,i].scatter(T_start_loc, ecg[T_start_loc], label='T_start', marker='o', s=50)
+          #  sc5 = axes[6,i].scatter(T_end_loc, ecg[T_end_loc], label='T_end', marker='o', s=50)
             axes[6,i].set_ylabel(leads[12+i])
 
             if i == 0:
@@ -696,4 +704,6 @@ def main_QRST(filtered_Data, idx, scored_code, postfix, names, vis=False, verbos
         else:
             plt.savefig('../explore/QRST/'+str(idx) + postfix)
         plt.close()    
+        
+    return Q_loc
     

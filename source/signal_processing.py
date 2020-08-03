@@ -85,16 +85,33 @@ def squaring(x):
     return y
 
 
-def MA(x):
+def MA(x, n):
     # Y(nt) = (1/N)[x(nT-(N - 1)T)+ x(nT - (N - 2)T)+...+x(nT)]
-    h = np.ones(31)/31
+    h = np.ones(n)/n
     y = signal.convolve(x, h)
-    y = y[15:]
+    y = y[(n//2):]
     y = y/max(abs(y))
     return y
 
 from sklearn.decomposition import PCA
-def Pan_Tompkins_QRS(ecg, verbose=False):
+
+def adjust_Q_and_S(Q_p, S_p, ecgs):
+    
+    for ecg in ecgs:
+        diff = np.diff(ecg)
+        diff2 = np.diff(diff)
+        # Adjusting Q_loc
+        while Q_p-1 > 0 and ecg[Q_p-1] < ecg[Q_p] and (diff[Q_p-1]>0 or diff2[Q_p] < max(diff2[Q_p-1], diff2[Q_p+1])):
+            Q_p = Q_p - 1
+
+        # Adjusting S_loc
+        while S_p < len(ecg)-1 and ecg[S_p+1] < ecg[S_p] and (diff[S_p-1]<0 or diff2[S_p] > min(diff2[S_p-1], diff2[S_p+1])):
+            S_p = S_p+1
+    #print("Q_p, S_p", Q_p, S_p)
+    return Q_p, S_p
+
+from sklearn import mixture 
+def Pan_Tompkins_QRS(ecg, ecg2, ecg_12leads, verbose=False):
     """
     Use Pan Tompkins algorithm to extract QRS
     cannot cope with negative R yet!
@@ -102,16 +119,69 @@ def Pan_Tompkins_QRS(ecg, verbose=False):
     :param verbose:
     :return:
     """
-    filtered_ecg = ecg
-
-    filtered_ecg = filtered_ecg/max(abs(filtered_ecg))
     
-    differentiated_ecg = derivative(filtered_ecg)
-    squaring_ecg = squaring(differentiated_ecg)
-    integrated_ecg = MA(squaring_ecg)
-    max_h = max(integrated_ecg)
-    thresh = max(np.mean(integrated_ecg)*max_h, 0.1)
+    def PT_preprocessing(ecg):
+        ecg = ecg/max(abs(ecg))
+        differentiated_ecg = derivative(ecg)
+        squaring_ecg = squaring(differentiated_ecg)
+        return squaring_ecg
+    
+    squaring_ecg = PT_preprocessing(ecg)
+    integrated_ecg = MA(squaring_ecg, n=51) #30 for 200Hz, we have 500Hz so we choose 30*2.5 = 75
+
+    peak_indices,_ = find_peaks(integrated_ecg)
+    
+    # use 2 Gaussian Mixture Regression to fit
+    gmm = mixture.GaussianMixture(random_state=0,
+                              n_components=2,
+                                 n_init=10)
+    
+    membership = gmm.fit_predict(integrated_ecg[peak_indices].reshape((-1,1))).flatten()
+    big_cluster = np.argmax(gmm.means_)
+    big_members = peak_indices[np.argwhere(membership==big_cluster)].flatten()
     if verbose:
+        print("membership", membership)
+        print("big_members", big_members)
+    
+    time = 0
+    while len(big_members) == 1 or np.max(np.diff(big_members))>2000 or big_members[0] > 2000 or len(integrated_ecg) - big_members[-1] > 2000 or len(big_members)/len(peak_indices)<0.1 :
+        time += 1
+        if time > 3:
+            break
+        peak_indices = list(peak_indices)
+        [peak_indices.remove(big_member) for big_member in big_members]
+        gmm = mixture.GaussianMixture(random_state=0,
+                              n_components=2,
+                              n_init=10)
+        membership = gmm.fit_predict(integrated_ecg[peak_indices].reshape((-1,1))).flatten()
+        big_cluster = np.argmax(gmm.means_)
+        big_members_idx = np.argwhere(membership==big_cluster).flatten()
+        big_members = np.array(peak_indices)[big_members_idx] if len(big_members_idx)>0 else [np.array(peak_indices)[np.argmax(integrated_ecg[peak_indices])]]
+        if verbose:
+            print("removed!!!!!!")
+            print("membership", membership)
+            print("big_members", big_members)
+        
+
+    peak_indices = np.array(peak_indices)
+    big_cluster = np.argmax(gmm.means_)
+    
+    gmm = mixture.GaussianMixture(random_state=0,
+                              n_components=2,
+                                 n_init=10)
+    membership = gmm.fit_predict(integrated_ecg[peak_indices].reshape((-1,1))).flatten()
+    big_members_idx = np.argwhere(membership==big_cluster).flatten()
+    big_members = np.array(peak_indices)[big_members_idx] if len(big_members_idx)>0 else np.array(peak_indices)[np.argmax(integrated_ecg[peak_indices])]
+    thresh = np.min(integrated_ecg[big_members]*0.99)
+
+    if verbose:
+        
+        plt.hist(integrated_ecg[peak_indices])
+        plt.show()
+        plt.close()
+        
+        print("membership", membership)
+        print("gmm.means_", gmm.means_)
         print("threshold:{}".format(thresh))
     poss_reg = (integrated_ecg>thresh)
     poss_reg=poss_reg.astype(int)
@@ -126,58 +196,86 @@ def Pan_Tompkins_QRS(ecg, verbose=False):
     right=right.astype(int)
 
     if verbose:
-        print("left:", left, "right:", right)
-#     if len(left) > 2:
-#        left = left[[0,2]]
-#        right = right[[0,2]]
+        print("threshold:{}".format(thresh))
+    poss_reg = (integrated_ecg>thresh)
+    poss_reg=poss_reg.astype(int)
 
-    if left[0] < 100:
+    # the left points of the integrated signal above the threshold
+    left = np.where(np.diff(np.insert(poss_reg, 0, 0))==1)[0]
+    left=left.astype(int)
+    #left=left-1 # give it a little bit more offset
+
+    # the right points of the integrated signal below the threshold
+    right = np.where(np.diff(np.insert(poss_reg, -1, 0))==-1)[0]
+    right=right.astype(int)        
+
+    if verbose:
+        print("left:", left, "right:", right)
+
+    if left[0] < 100 and len(left)>1:
         left = left[1:]
         right = right[1:]
-        
-    if left[-1] > len(filtered_ecg) - 100:
+
+    if left[-1] > len(ecg) - 100:
         left = left[:-1]
         right = right[:-1]
-    
+
+    # filter too near left and right
+#     left_filtered = []
+#     right_filtered = []
+#     RR_TH = 50
+#     i = 0
+#     while i < len(left)-1:
+#         if right[i+1] - left[i] <= RR_TH:
+#             left_filtered.append(left[i])
+#             right_filtered.append(right[i+1])
+#             i+=1
+#         else:
+#             left_filtered.append(left[i])
+#             right_filtered.append(right[i])            
+#         i+=1
+#     left = left_filtered
+#     right = right_filtered
+
     # scan from left to right
     R_loc=np.zeros(len(left), dtype=int)
     Q_loc=np.zeros(len(left), dtype=int)
     S_loc=np.zeros(len(left), dtype=int)
-            
-    for i in range(len(left)):
-        R_loc[i] = np.argmax(filtered_ecg[left[i]:right[i]+1])
-        R_loc[i] = R_loc[i]+left[i]
 
+    # use a copy of filtered_ecg to record "un-inverted" filtered_ecg
+    segment = ecg.copy()
+    for i in range(len(left)):
+        
+        segment_ecg = correct_axis_ecg(ecg[left[i]:right[i]+1])
+        #segment_ecg2 = correct_axis_ecg(ecg2[left[i]:right[i]+1])
+
+        segment[left[i]:right[i]+1] = segment_ecg
+
+        R_loc[i] = np.argmax(segment[left[i]:right[i]+1]) + left[i]
+    
+        # R-left and R_right to search for the max segment as R
         # R_left
         R_left = R_loc[i]
-        while R_left-1 and filtered_ecg[R_left-1] > filtered_ecg[R_left]:
+        while R_left-1 > left[i] and segment[R_left-1] > segment[R_left]:
             R_left = R_left-1
-        if filtered_ecg[R_left] > filtered_ecg[R_loc[i]]:
+        if segment[R_left] > segment[R_loc[i]]:
             R_loc[i] = R_left
 
         # R_right
         R_right = R_loc[i]            
-        while R_right+1 < right[i] and filtered_ecg[R_right+1] > filtered_ecg[R_right]:
+        while R_right+1 < right[i] and segment[R_right+1] > segment[R_right]:
             R_right = R_right+1
-        if filtered_ecg[R_right] > filtered_ecg[R_loc[i]]:
+        if segment[R_right] > segment[R_loc[i]]:
             R_loc[i] = R_right
 
         left[i] = min(left[i], R_loc[i])
         right[i] = max(right[i], R_loc[i])
-        
-        # Adjusting Q_loc
-        Q_loc[i] = np.argmin(filtered_ecg[left[i]:R_loc[i]+1])
-        Q_loc[i] = Q_loc[i]+left[i]   
-        while Q_loc[i]-1 and filtered_ecg[Q_loc[i]-1] < filtered_ecg[Q_loc[i]]:
-            Q_loc[i] = Q_loc[i] - 1
 
-        # Adjusting S_loc
-        S_loc[i] = np.argmin(filtered_ecg[R_loc[i]:right[i]+1])
-        S_loc[i] = S_loc[i]+R_loc[i]+1
-        while S_loc[i]+1 < len(ecg)-1 and filtered_ecg[S_loc[i]+1] < filtered_ecg[S_loc[i]]:
-            S_loc[i] = S_loc[i]+1
-            
-    
+        Q_loc[i] = np.argmin(ecg[left[i]:R_loc[i]+1]) + left[i]# left - R, R_loc[i]-10 #
+        S_loc[i] = np.argmin(ecg[R_loc[i]:right[i]+1]) + R_loc[i] # R-right R_loc[i]+10 #
+
+        Q_loc[i], S_loc[i] = adjust_Q_and_S(Q_loc[i], S_loc[i], [ segment])
+
     if verbose:
         print("Q locations:", Q_loc)
         print("R locations:", R_loc)
@@ -247,8 +345,20 @@ def find_AD(ecg_12leads, vis=False):
 from itertools import groupby
 from operator import itemgetter
 
+def correct_axis_ecg(ecg, vis=False):
+    peak_indices,_ = find_peaks(np.abs(ecg), height=np.percentile(np.abs(ecg), 98))
+    if vis:
+        plt.plot(ecg)
+        plt.scatter(peak_indices, ecg[peak_indices])
+        plt.show()
+        plt.close()
+    sign = 1 if np.sum(ecg[peak_indices] > 0) > np.sum(ecg[peak_indices] < 0) else -1
+    ecg *= sign
+    return ecg
+        
 def extract_QRST(ecg_12leads, vis=False, vis_res=False, only_qrs=False, verbose=False,
-                 filter_twice=False, qrs_chn=12, code=None, title=None):
+                 filter_twice=False, qrs_chn=12, code=None, title=None
+                ):
     """
     To extract the QRST.
     Cannot cope with the negative R yet!
@@ -259,59 +369,55 @@ def extract_QRST(ecg_12leads, vis=False, vis_res=False, only_qrs=False, verbose=
     filtered_ecg2 = None
     if qrs_chn == 12:
         # frontal leads
-        filtered_ecg = PCA(1).fit_transform(ecg_12leads[:3,:].transpose()).flatten() 
-        peak_indices,_ = find_peaks(np.abs(filtered_ecg), height=np.percentile(np.abs(filtered_ecg), 98))
-        if vis:
-            plt.plot(filtered_ecg)
-            plt.scatter(peak_indices, filtered_ecg[peak_indices])
-            plt.show()
-            plt.close()
+        pca_res = PCA(2).fit_transform(ecg_12leads.transpose())
+        filtered_ecg = pca_res[:,0].flatten()
+        filtered_ecg2 = pca_res[:,1].flatten()
+        
+        filtered_ecg = correct_axis_ecg(filtered_ecg)
+        filtered_ecg2 = correct_axis_ecg(filtered_ecg2)
 
-        sign = 1 if np.sum(filtered_ecg[peak_indices] > 0) > np.sum(filtered_ecg[peak_indices] < 0) else -1
-        filtered_ecg *= sign
-        
-        
-        # all leads
-        filtered_ecg2 = None
-#         if np.sum(ecg_12leads[[7,8],:]) != 0:
-#             filtered_ecg2 = PCA(1).fit_transform(ecg_12leads[[7,8],:].transpose()).flatten() 
-#         else:
-#             
-        filtered_ecg2 = PCA(1).fit_transform(ecg_12leads[[0,1],:].transpose()).flatten() 
-            
-#         peak_indices,_ = find_peaks(np.abs(filtered_ecg2), height=np.percentile(np.abs(filtered_ecg2), 98))
-#         sign = 1 if np.sum(filtered_ecg2[peak_indices] > 0) > np.sum(filtered_ecg2[peak_indices] < 0) else -1
-#         filtered_ecg2 *= sign
-        peak_indices,_ = find_peaks(np.abs(ecg_12leads[0,:]), height=np.percentile(np.abs(ecg_12leads[0,:]), 99))
-        pos_R_I = 1 if np.sum(ecg_12leads[0,peak_indices] > 0) > np.sum(ecg_12leads[0,peak_indices] < 0) else -1
-        filtered_ecg2 = ecg_12leads[0,:] #* pos_R_I
-        
     elif qrs_chn == 13:
         frontal_verticle_leads =  PCA(2).fit_transform(ecg_12leads[[0, 5],:].transpose()).transpose()
         filtered_ecg = frontal_verticle_leads[0,:] * pos_R_I * pos_R_aVF
     else:
         filtered_ecg = ecg_12leads[qrs_chn,:]
 
+    
     if vis:    
         plt.figure(figsize=(15,3))
-        plt.plot(frontal_leads.transpose())
+        #plt.plot(frontal_leads.transpose())
         plt.plot(filtered_ecg, c='black')
         plt.title('signal for QRST segmentation')
         plt.show()
         plt.close()
-        
-    Q_loc, R_loc, S_loc, integrated_ecg, left, right, thresh = Pan_Tompkins_QRS(filtered_ecg, verbose=verbose)
     
+#     thresh = 0.15
+    Q_loc, R_loc, S_loc, integrated_ecg, left, right, thresh = Pan_Tompkins_QRS(filtered_ecg, filtered_ecg2, ecg_12leads, verbose=verbose)
+#     while thresh >= 0.02 and len(R_loc) < 3 or np.std([R_loc[i+1]-R_loc[i] for i in range(len(R_loc)-1)]) > 300 or R_loc[-1]<1400 or R_loc[0] > 1600:
+#         thresh  -= 0.01
+#         Q_loc, R_loc, S_loc, integrated_ecg, left, right = Pan_Tompkins_QRS(filtered_ecg, filtered_ecg2, ecg_12leads, verbose=verbose, thresh=thresh)
+       
+    if verbose:
+        print("------------------")
+        print("------report------")
+        print("RR std", np.std([R_loc[i+1]-R_loc[i] for i in range(len(R_loc)-1)]))
+        print("R_loc", R_loc)
+        print("------------------")
+        print("------------------")
+        
     if vis:    
-        plt.figure(figsize=(20,10))
-        plt.hlines(thresh, 0, len(filtered_ecg))
-        plt.plot(filtered_ecg, label='filtered_ecg')
-        plt.plot(integrated_ecg, label='integrated signal')
-        plt.scatter(left, integrated_ecg[left], label='left')
-        plt.scatter(right, integrated_ecg[right], label='right')
-        plt.scatter(Q_loc, filtered_ecg[Q_loc], label='Q', marker='^', s=100)
-        plt.scatter(R_loc, filtered_ecg[R_loc], label='R', marker='^', s=100)
-        plt.scatter(S_loc, filtered_ecg[S_loc], label='S', marker='^', s=100)
+        fig = plt.figure(figsize=(20,10))
+        ax = fig.add_subplot(111)
+        
+        ax.plot(filtered_ecg, '--', label='filtered_ecg', c='grey')
+        ax2 = ax.twinx()
+        ax2.hlines(thresh, 0, len(filtered_ecg))
+        ax2.plot(integrated_ecg, label='integrated signal')
+        ax.scatter(left, integrated_ecg[left], label='left')
+        ax.scatter(right, integrated_ecg[right], label='right')
+        ax.scatter(Q_loc, filtered_ecg[Q_loc], label='Q', marker='^', s=100)
+        ax.scatter(R_loc, filtered_ecg[R_loc], label='R', marker='^', s=100)
+        ax.scatter(S_loc, filtered_ecg[S_loc], label='S', marker='^', s=100)
         plt.legend(loc='best')
         #plt.title("Detect QRS of patient {} phase {}".format(patient_num, phase_num))
         #plt.savefig('../result/pAF/seg/' + str(patient_num) + '_' + str(phase_num) + '_seg.png')
@@ -405,12 +511,12 @@ def extract_QRST(ecg_12leads, vis=False, vis_res=False, only_qrs=False, verbose=
                     intervals[i] = grouping[-1] - grouping[0]
                     T_start_loc[i] = grouping[0]
                     T_end_loc[i] = grouping[-1]
-                    T_peak_loc[i] = np.argmax(time_vars[T_start_loc[i]: T_end_loc[i]])
+                    T_peak_loc[i] = np.argmax(time_vars[T_start_loc[i]: T_end_loc[i]]) + T_start_loc[i]
                     if vis:
                         plt.axvspan(grouping[0], grouping[-1], alpha=0.4, color='C3')
-                elif grouping[-1]- R_loc[i] > RTmax:
-                    if vis:
-                        plt.axvspan(grouping[0], grouping[-1], alpha=0.4, color='C4')                
+#                 elif grouping[-1]- R_loc[i] > RTmax:
+#                     if vis:
+#                         plt.axvspan(grouping[0], grouping[-1], alpha=0.4, color='C4')                
 
     MA_peak = np.convolve(filtered_ecg2, np.ones((W1,))/W1, mode='same')
     MA_Twave = np.convolve(filtered_ecg2, np.ones((W2,))/W2, mode='same')
@@ -470,88 +576,124 @@ def cwt(signal,name='', wavelet_type = 'morl', vis=False):
         
     return coefs
 
+import seaborn as sns
+sns.set_style("whitegrid")
 
-def main_QRST(filtered_Data, idx, scored_code, postfix, names, vis=False):
+def main_QRST(filtered_Data, idx, scored_code, postfix, names, vis=False, verbose=False, fig1=False, fig2=False):
     
-    leads = ['I', 'II', 'III', 'aVR', 'aVL', 'aVF', 'V1', 'V2','V3','V4','V5','V6','frontal PCA-1', 'I post']
+    leads = ['I', 'II', 'III', 'aVR', 'aVL', 'aVF', 'V1', 'V2','V3','V4','V5','V6','PCA-1','PCA-2']
     qrs_chn = 12
-    Q_loc, R_loc, S_loc, T_start_loc, T_peak_loc, T_end_loc, filtered_ecg, filtered_ecg2 =extract_QRST(filtered_Data, vis_res=False, vis=False, verbose=False, qrs_chn=qrs_chn,
+    Q_loc, R_loc, S_loc, T_start_loc, T_peak_loc, T_end_loc, filtered_ecg, filtered_ecg2 =extract_QRST(filtered_Data, vis_res=False, vis=vis, verbose=verbose, qrs_chn=qrs_chn,
                    code=str(scored_code) + postfix, 
                    title=str(idx) + ' ' + str(scored_code) + ' ' + str(leads[qrs_chn]) + ' ' + names)
 
-#     fig, axes = plt.subplots(7, 2, figsize=(20,10), sharey=False, sharex=True)
-#     lead = 0
-#     for j in range(2):
-#         for i in range(6):
-#             ax = axes[i,j]
-#             ax.plot(filtered_Data[lead,:], c='black')
-#             ax.set_ylabel(leads[lead])
+    if fig1:
+        fig, axes = plt.subplots(7, 2, figsize=(20,10), sharey=False, sharex=True)
+        lead = 0
+        for j in range(2):
+            for i in range(6):
+                ax = axes[i,j]
+                ax.plot(filtered_Data[lead,:], c='black')
+                ax.set_ylabel(leads[lead])
 
-#             ax.scatter(Q_loc, filtered_Data[lead,:][Q_loc], label='Q', marker='^', s=50)
-#             ax.scatter(R_loc, filtered_Data[lead,:][R_loc], label='R', marker='^', s=50)
-#             ax.scatter(S_loc, filtered_Data[lead,:][S_loc], label='S', marker='^', s=50)
+                ax.scatter(Q_loc, filtered_Data[lead,:][Q_loc], label='Q', marker='^', s=50)
+                ax.scatter(R_loc, filtered_Data[lead,:][R_loc], label='R', marker='^', s=50)
+                ax.scatter(S_loc, filtered_Data[lead,:][S_loc], label='S', marker='^', s=50)
 
-#             ax.scatter(T_start_loc, filtered_Data[lead,:][T_start_loc], label='T_start', marker='o', s=50)
-#             ax.scatter(T_end_loc, filtered_Data[lead,:][T_end_loc], label='T_end', marker='o', s=50)
-#             lead += 1
+                ax.scatter(T_start_loc, filtered_Data[lead,:][T_start_loc], label='T_start', marker='o', s=50)
+                ax.scatter(T_end_loc, filtered_Data[lead,:][T_end_loc], label='T_end', marker='o', s=50)
+                lead += 1
 
-#     for i, ecg in enumerate([filtered_ecg, filtered_ecg2]):
-#         axes[6,i].plot(ecg, c='black')
-#         sc1 = axes[6,i].scatter(Q_loc, ecg[Q_loc], label='Q', marker='^', s=50)
-#         sc2 = axes[6,i].scatter(R_loc, ecg[R_loc], label='R', marker='^', s=50)
-#         sc3 = axes[6,i].scatter(S_loc, ecg[S_loc], label='S', marker='^', s=50)
+        for i, ecg in enumerate([filtered_ecg, filtered_ecg2]):
+            axes[6,i].plot(ecg, c='black')
+            sc1 = axes[6,i].scatter(Q_loc, ecg[Q_loc], label='Q', marker='^', s=50)
+            sc2 = axes[6,i].scatter(R_loc, ecg[R_loc], label='R', marker='^', s=50)
+            sc3 = axes[6,i].scatter(S_loc, ecg[S_loc], label='S', marker='^', s=50)
 
-#         sc4 = axes[6,i].scatter(T_start_loc, ecg[T_start_loc], label='T_start', marker='o', s=50)
-#         sc5 = axes[6,i].scatter(T_end_loc, ecg[T_end_loc], label='T_end', marker='o', s=50)
-#         axes[6,i].set_ylabel(leads[12+i])
-        
-#         if i == 0:
-#             fig.legend([sc1, sc2, sc3, sc4, sc5],     # The line objects
-#                ['Q', 'R', 'S', 'T_start', 'T_end'],   # The labels for each line
-#                loc="lower center",   # Position of legend
-#                borderaxespad=0.1,    # Small spacing around legend box
-#                ncol = 5
-#                )
+            sc4 = axes[6,i].scatter(T_start_loc, ecg[T_start_loc], label='T_start', marker='o', s=50)
+            sc5 = axes[6,i].scatter(T_end_loc, ecg[T_end_loc], label='T_end', marker='o', s=50)
+            axes[6,i].set_ylabel(leads[12+i])
 
-#     plt.suptitle(str(idx) + ' ' + str(scored_code) + ' ' + str(leads[qrs_chn]) + ' ' + names)
-    
-#     if vis:
-#         plt.show()
-#     else:
-#         plt.savefig('../explore/conditions/'+str(scored_code) + postfix)
-#     plt.close()
-    
-    # segment the Q-S segment
-    
-    fig, axes = plt.subplots(6, 4, figsize=(20,10), sharey=False, sharex=False)
-    lead = 0
-    for j in range(2):
-        for i in range(6):
-            ax = axes[i,j]
-            ax.set_ylabel(leads[lead])
-            for k in range(len(Q_loc)-1):
-                ax.plot(filtered_Data[lead, Q_loc[k]:S_loc[k]])
-            lead += 1
-    lead = 0
-    for j in [2,3]:
-        for i in range(6):
-            ax = axes[i,j]
-            ax.set_ylabel(leads[lead])
-            for k in range(len(Q_loc)-1):
-                ax.plot(filtered_Data[lead, S_loc[k]:Q_loc[k+1]])
-            lead += 1  
-            
-            if lead == 1:
-                fig.legend([str(Q_loc[k]) for k in range(len(Q_loc)-1)],   # The labels for each line
-                   loc="right",   # Position of legend
+            if i == 0:
+                fig.legend([sc1, sc2, sc3, sc4, sc5],     # The line objects
+                   ['Q', 'R', 'S', 'Ts', 'Te'],   # The labels for each line
+                   loc="lower center",   # Position of legend
                    borderaxespad=0.1,    # Small spacing around legend box
-                   ncol = 1
+                   ncol = 5
                    )
 
-    plt.suptitle(str(idx) + ' ' + str(scored_code) + ' ' + str(leads[qrs_chn]) + ' ' + names)
-    if vis:
-        plt.show()
-    else:
-        plt.savefig('../explore/QRST/'+str(scored_code) + postfix)
-    plt.close()    
+        plt.suptitle(str(idx) + ' ' + str(scored_code) + ' ' + str(leads[qrs_chn]) + ' ' + names)
+
+        if vis:
+            plt.show()
+        else:
+            plt.savefig('../explore/conditions/'+str(idx) + postfix)
+        plt.close()
+    
+    if fig2:
+        RR_avg = np.median([R_loc[k+1] - R_loc[k] for k in range(len(Q_loc)-1)])
+        RR_th = (0.3 * RR_avg, 3 * RR_avg)
+        if verbose:
+            print("RR_avg", RR_avg, "RR_th", RR_th)
+
+        # segment the Q-S segment
+        sns.set_style("whitegrid")
+        fig, axes = plt.subplots(7, 4, figsize=(20,18), sharey=False, sharex=False)
+        lead = 0
+
+
+        ks = [k for k in range(len(Q_loc)-1) if R_loc[k+1] - R_loc[k] > RR_th[0] 
+              and R_loc[k+1] - R_loc[k] < RR_th[1]
+              and S_loc[k] - Q_loc[k] > 10] # 10 / 500 = 0.02s
+        #print("ks", ks)
+        n = len(ks)
+        colors = plt.cm.jet(np.linspace(0,1,n))
+        for j in [0,2]:
+            for i in range(6):
+                ax = axes[i,j]
+                ax.set_ylabel(leads[lead])
+                times = [range(Q_loc[k]-R_loc[k],S_loc[k]-R_loc[k]) for k in ks]
+                lines = [filtered_Data[lead, Q_loc[k]:S_loc[k]] for k in ks]
+                for k, line in enumerate(lines):
+                    ax.plot(times[k], line, c=colors[k])
+
+                ax = axes[i,j+1]
+                ax.set_ylabel(leads[lead])
+                lines = [filtered_Data[lead, S_loc[k]:Q_loc[k+1]] for k in ks]
+                for k, line in enumerate(lines):
+                    ax.plot( line, c=colors[k])
+
+                lead += 1  
+
+                if lead == 1:
+                    fig.legend([str(Q_loc[k]) for k in range(len(Q_loc)-1)],   # The labels for each line
+                       loc="right",   # Position of legend
+                       borderaxespad=0.1,    # Small spacing around legend box
+                       ncol = 1,
+                       title='Q time'
+                       )
+
+        j = 0
+        for ecg in [filtered_ecg, filtered_ecg2]:
+
+            times = [range(Q_loc[k]-R_loc[k],S_loc[k]-R_loc[k]) for k in ks]
+            lines = [ecg[Q_loc[k]:S_loc[k]] for k in ks]   
+            for k, line in enumerate(lines):
+                axes[6,j].plot(times[k], line, c=colors[k])
+            axes[6,j].set_ylabel(leads[12+j])
+
+            lines = [ecg[S_loc[k]:Q_loc[k+1]] for k in ks]    
+            for k, line in enumerate(lines):
+                axes[6,j+2].plot( line, c=colors[k])
+
+            axes[6,j+2].set_ylabel(leads[12+j])
+            j-=1
+
+        plt.suptitle(str(idx) + ' ' + str(scored_code) + ' ' + str(leads[qrs_chn]) + ' ' + names)
+        plt.subplots_adjust(left=None, bottom=None, right=None, top=None, wspace=0.4, hspace=None)
+        if vis:
+            plt.show()
+        else:
+            plt.savefig('../explore/QRST/'+str(idx) + postfix)
+        plt.close()    
     

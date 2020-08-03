@@ -623,8 +623,8 @@ def main_QRST(filtered_Data, idx, scored_code, postfix, names, vis=False, verbos
             axes[6,i].set_ylabel(leads[12+i])
 
             if i == 0:
-                fig.legend([sc1, sc2, sc3, sc4, sc5],     # The line objects
-                   ['Q', 'R', 'S', 'Ts', 'Te'],   # The labels for each line
+                fig.legend([sc1, sc2, sc3],     # The line objects
+                   ['Q', 'R', 'S'],   # The labels for each line
                    loc="lower center",   # Position of legend
                    borderaxespad=0.1,    # Small spacing around legend box
                    ncol = 5

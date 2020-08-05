@@ -1,7 +1,7 @@
 """
 1D ResNet adapted from https://towardsdatascience.com/residual-network-implementing-resnet-a7da63c7b278
 """
-
+import torch
 from torch import nn
 from torchvision import models
 
@@ -13,7 +13,7 @@ class Conv1dAuto(nn.Conv1d):
        # print(self.kernel_size, self.padding)
         
 conv3 = partial(Conv1dAuto, kernel_size=3, bias=False)   
-
+#print(conv3(64,32))
 def activation_func(activation):
     return  nn.ModuleDict([
         ['relu', nn.ReLU(inplace=True)],
@@ -48,7 +48,13 @@ class ResidualBlock(nn.Module):
     @property
     def should_apply_shortcut(self):
         return self.in_channels != self.out_channels
-    
+#ResidualBlock(32, 64)    
+# dummy = torch.ones((1, 1, 1))
+# block = ResidualBlock(1, 64)
+# block(dummy)
+# tensor([[[2.]]])
+
+
 class ResNetResidualBlock(ResidualBlock):
     def __init__(self, in_channels, out_channels, expansion=1, downsampling=1, conv=conv3, *args, **kwargs):
         super().__init__(in_channels, out_channels, *args, **kwargs)
@@ -66,7 +72,8 @@ class ResNetResidualBlock(ResidualBlock):
     @property
     def should_apply_shortcut(self):
         return self.in_channels != self.expanded_channels
-    
+#block = ResNetResidualBlock(32, 64)
+
 def conv_bn(in_channels, out_channels, conv, *args, **kwargs):
     return nn.Sequential(conv(in_channels, out_channels, *args, **kwargs), nn.BatchNorm1d(out_channels))
 
@@ -82,7 +89,10 @@ class ResNetBasicBlock(ResNetResidualBlock):
             activation_func(self.activation),
             conv_bn(self.out_channels, self.expanded_channels, conv=self.conv, bias=False),
         )
-        
+# dummy = torch.ones((1, 32, 224))# in channel 1, out channel 32, length 224 (in 2d there is another dim)
+# block = ResNetBasicBlock(32, 64)
+# block(dummy).shape
+
 class ResNetBottleNeckBlock(ResNetResidualBlock):
     expansion = 4
     def __init__(self, in_channels, out_channels, *args, **kwargs):
@@ -94,7 +104,11 @@ class ResNetBottleNeckBlock(ResNetResidualBlock):
              activation_func(self.activation),
              conv_bn(self.out_channels, self.expanded_channels, self.conv, kernel_size=1),
         )
-        
+# dummy = torch.ones((1, 32, 10))
+# block = ResNetBottleNeckBlock(32, 64)
+# block(dummy).shape
+# print(block)
+
 class ResNetLayer(nn.Module):
     """
     A ResNet layer composed by `n` blocks stacked one after the other
@@ -111,7 +125,10 @@ class ResNetLayer(nn.Module):
     def forward(self, x):
         x = self.blocks(x)
         return x
-    
+# dummy = torch.ones((1, 64, 48))
+# layer = ResNetLayer(64, 128, block=ResNetBasicBlock, n=3)
+# layer(dummy).shape
+
 class ResNetEncoder(nn.Module):
     """
     ResNet encoder composed by layers with increasing features.
@@ -172,7 +189,9 @@ class ResNet(nn.Module):
         x = self.encoder(x)
         x = self.decoder(x)
         return x
-    
+# resnet = resnet18(64, len(labels))
+# resnet(dummy) 
+
 def resnet18(in_channels, n_classes, block=ResNetBasicBlock, *args, **kwargs):
     return ResNet(in_channels, n_classes, block=block, deepths=[2, 2, 2, 2], *args, **kwargs)
 
@@ -187,4 +206,24 @@ def resnet101(in_channels, n_classes, block=ResNetBottleNeckBlock, *args, **kwar
 
 def resnet152(in_channels, n_classes, block=ResNetBottleNeckBlock, *args, **kwargs):
     return ResNet(in_channels, n_classes, block=block, deepths=[3, 8, 36, 3], *args, **kwargs)
+
+
+class ECGResNet(nn.Module):
+    
+    """
+    Combining 12 lead ecg on a network
+    """
+    
+    def __init__(self, in_channels, n_classes, ecg_channels=12, *args, **kwargs):
+        super().__init__()
+        self.ecg_channels = ecg_channels
+        self.encoders = nn.ModuleList([ResNetEncoder(in_channels, block=ResNetBasicBlock, deepths=[2, 2, 2, 2], *args, **kwargs) for i in range(ecg_channels)])
+        self.decoder = ResnetDecoder(self.encoders[0].blocks[-1].blocks[-1].expanded_channels*ecg_channels, n_classes)
+       
+    def forward(self, xs):
+        x = torch.cat([self.encoders[i](xs[:,:,[i]]) for i in range(self.ecg_channels)], axis=1)
+        
+        x = self.decoder(x)
+        return x
+        
 

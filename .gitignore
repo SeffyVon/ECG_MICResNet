@@ -13,7 +13,7 @@ input/*
 *.pkl
 *.npy
 *.png
-evaluation/
+source/evaluation/
 Data/
 explore/
 source/runs/*

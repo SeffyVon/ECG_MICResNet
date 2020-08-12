@@ -13,6 +13,8 @@ class Conv1dAuto(nn.Conv1d):
        # print(self.kernel_size, self.padding)
         
 conv3 = partial(Conv1dAuto, kernel_size=3, bias=False)   
+conv5 = partial(Conv1dAuto, kernel_size=5, bias=False)   
+conv9 = partial(Conv1dAuto, kernel_size=9, bias=False)   
 #print(conv3(64,32))
 def activation_func(activation):
     return  nn.ModuleDict([
@@ -21,13 +23,6 @@ def activation_func(activation):
         ['selu', nn.SELU(inplace=True)],
         ['none', nn.Identity()]
     ])[activation]
-
-from functools import partial
-class Conv1dAuto(nn.Conv1d):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.padding =  (self.kernel_size[0] // 2,) # dynamic add padding based on the kernel_size
-       # print(self.kernel_size, self.padding)
 
 class ResidualBlock(nn.Module):
     def __init__(self, in_channels, out_channels, activation='relu'):
@@ -41,7 +36,9 @@ class ResidualBlock(nn.Module):
         residual = x
         if self.should_apply_shortcut: residual = self.shortcut(x)
         x = self.blocks(x)
-        x += residual
+       # print("x.shape", x.shape, "residual.shape", residual.shape, "self.in_channels", self.in_channels, "self.out_channels", self.out_channels)
+        x += residual # x = torch.cat([x, residual], dim=2)
+        
         x = self.activate(x)
         return x
     
@@ -119,7 +116,7 @@ class ResNetLayer(nn.Module):
         downsampling = 2 if in_channels != out_channels else 1
         self.blocks = nn.Sequential(
             block(in_channels , out_channels, *args, **kwargs, downsampling=downsampling),
-            *[block(out_channels * block.expansion, out_channels, downsampling=1, *args, **kwargs) for _ in range(n - 1)]
+            *[block(out_channels * block.expansion, out_channels, downsampling=1, *args, **kwargs) for _ in range(1, n)]
         )
 
     def forward(self, x):
@@ -225,5 +222,41 @@ class ECGResNet(nn.Module):
         
         x = self.decoder(x)
         return x
-        
 
+class ECGResNet50(nn.Module):
+    
+    """
+    Combining 12 lead ecg on a network
+    """
+    
+    def __init__(self, in_channels, n_classes, *args, **kwargs):
+        super().__init__()
+        self.ecg_channels = ecg_channels
+        self.encoders = ResNetEncoder(in_channels, block=ResNetBottleNeckBlock, deepths=[3, 4, 6, 3], *args, **kwargs)
+        self.decoder = ResnetDecoder(self.encoder.blocks[-1].blocks[-1].expanded_channels, n_classes)
+       
+    def forward(self, xs):
+        x = self.encoder(xs) 
+        x = self.decoder(x)
+        return x
+    
+# class ECG853ResNet(nn.Module):
+    
+#     """
+#     Combining 12 lead ecg on a network
+#     """
+    
+#     def __init__(self, in_channels, n_classes, ecg_channels=12, *args, **kwargs):
+#         super().__init__()
+#         self.ecg_channels = ecg_channels
+#         self.encoder = ResNetEncoder(in_channels, block=ResNetBasicBlock, blocks_sizes=[64, 128, 128], deepths=[3, 3, 3], *args, **kwargs)
+#         self.decoder = ResnetDecoder(self.encoder.blocks[-1].blocks[-1].expanded_channels, n_classes)
+       
+#     def forward(self, xs):
+#         x = self.encoder(xs) 
+#         x = self.decoder(x)
+#         return x
+
+# model = ECG853ResNet(MAX_RR, len(labels))
+# dummy = torch.ones((10, MAX_RR, 12)) # SAMPLES, LENGTH, CHANNEL
+# model(dummy)

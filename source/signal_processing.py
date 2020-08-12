@@ -137,7 +137,10 @@ def Pan_Tompkins_QRS(ecg, ecg2, ecg_12leads, verbose=False):
     squaring_ecg = PT_preprocessing(ecg)
     integrated_ecg = MA(squaring_ecg, n=51) #30 for 200Hz, we have 500Hz so we choose 30*2.5 = 75
 
-    peak_indices,_ = find_peaks(integrated_ecg)
+    peak_indices,_ = find_peaks(integrated_ecg, distance=100)
+    if len(peak_indices) < 3:
+        print("!!!!!!!")
+        peak_indices,_ = find_peaks(integrated_ecg)
     
     # use 2 Gaussian Mixture Regression to fit
     gmm = mixture.GaussianMixture(random_state=0,
@@ -152,7 +155,8 @@ def Pan_Tompkins_QRS(ecg, ecg2, ecg_12leads, verbose=False):
         print("big_members", big_members)
     
     time = 0
-    while len(big_members) < 3 or np.max(np.diff(big_members))>2000 or big_members[0] > 2000 or len(integrated_ecg) - big_members[-1] > 2000 or len(big_members)/len(peak_indices)<0.05 or big_members[-1] - big_members[0] < 300: 
+    RR_TH = 2000
+    while len(big_members) < 3 or np.max(np.diff(big_members))>RR_TH or big_members[0] > RR_TH or len(integrated_ecg) - big_members[-1] > RR_TH or len(big_members)/len(peak_indices)<0.05 or big_members[-1] - big_members[0] < 300: 
         time += 1
         if time > 3:
             break
@@ -589,7 +593,7 @@ sns.set_style("whitegrid")
 
 def main_QRST(filtered_Data, idx, scored_code, postfix, names, vis=False, verbose=False, fig1=False, fig2=False):
     
-    leads = ['I', 'II', 'III', 'aVR', 'aVL', 'aVF', 'V1', 'V2','V3','V4','V5','V6','PCA-1','PCA-2']
+    leads = ['I', 'II', 'III', 'aVR', 'aVL', 'aVF', 'V1', 'V2','V3','V4','V5','V6','PCA-1','', 'PCA-2']
     qrs_chn = 12
     Q_loc, R_loc, S_loc, T_start_loc, T_peak_loc, T_end_loc, filtered_ecg, filtered_ecg2 =extract_QRST(filtered_Data, vis_res=False, vis=vis, verbose=verbose, qrs_chn=qrs_chn,
                    code=str(scored_code) + postfix, 
@@ -652,7 +656,7 @@ def main_QRST(filtered_Data, idx, scored_code, postfix, names, vis=False, verbos
 
         ks = [k for k in range(len(Q_loc)-1) if R_loc[k+1] - R_loc[k] > RR_th[0] 
               and R_loc[k+1] - R_loc[k] < RR_th[1]
-              and S_loc[k] - Q_loc[k] > 10] # 10 / 500 = 0.02s
+              and S_loc[k] - Q_loc[k] > 10 and R_loc[k] != Q_loc[k] and R_loc[k] != S_loc[k]] # 10 / 500 = 0.02s
         #print("ks", ks)
         n = len(ks)
         colors = plt.cm.jet(np.linspace(0,1,n))
@@ -682,7 +686,7 @@ def main_QRST(filtered_Data, idx, scored_code, postfix, names, vis=False, verbos
                        )
 
         j = 0
-        for ecg in [filtered_ecg, filtered_ecg2]:
+        for ecg in [filtered_ecg, filtered_ecg2]: # 0, 1 => col: 0,1; 2,3. label: 12, 13
 
             times = [range(Q_loc[k]-R_loc[k],S_loc[k]-R_loc[k]) for k in ks]
             lines = [ecg[Q_loc[k]:S_loc[k]] for k in ks]   
@@ -692,10 +696,10 @@ def main_QRST(filtered_Data, idx, scored_code, postfix, names, vis=False, verbos
 
             lines = [ecg[S_loc[k]:Q_loc[k+1]] for k in ks]    
             for k, line in enumerate(lines):
-                axes[6,j+2].plot( line, c=colors[k])
-
-            axes[6,j+2].set_ylabel(leads[12+j])
-            j-=1
+                axes[6,j+1].plot( line, c=colors[k])
+            axes[6,j+1].set_ylabel(leads[12+j])
+            
+            j+=2
 
         plt.suptitle(str(idx) + ' ' + str(scored_code) + ' ' + str(leads[qrs_chn]) + ' ' + names)
         plt.subplots_adjust(left=None, bottom=None, right=None, top=None, wspace=0.4, hspace=None)

@@ -352,14 +352,14 @@ def binary_acc_mic(y_preds, y_tests, beta=2):
     #return accs, fbetas, fmeasures, gbetas, aurocs, auprcs
     return np.mean(accs), np.mean(fbetas), np.mean(fmeasures), np.mean(gbetas), np.mean(aurocs), np.mean(auprcs)
 
-def binary_acc(y_preds, y_tests, beta=2):
+def binary_acc(y_preds, y_tests, beta=2, mode='mean'):
     accs = []
     fmeasures = []
     fbetas = []
     gbetas = []
     aurocs = []
     auprcs = []
-    for i in range(9):
+    for i in range(27):
         
         # Tensor
         y_pred_prob, y_test = y_preds[:,i], y_tests[:,i]
@@ -379,7 +379,7 @@ def binary_acc(y_preds, y_tests, beta=2):
             y_test_numpy = y_test.data.numpy()
             y_pred_prob_numpy = y_pred_prob.data.numpy()
     
-        #auroc, auprc = binary_acc_core(y_test_numpy, y_pred_prob_numpy)
+  #      auroc, auprc = binary_acc_core(y_test_numpy, y_pred_prob_numpy)
         # old way to cal acc:
         #correct_results_sum = (y_pred_tag == y_test).sum().float()
         #acc = true_positives/y_test.shape[0]
@@ -397,10 +397,12 @@ def binary_acc(y_preds, y_tests, beta=2):
         fbetas.append(fbeta)#.data.cpu().numpy())
         fmeasures.append(fmeasure)
         gbetas.append(gbeta)
-        #aurocs.append(auroc)
-        #auprcs.append(auprc)
-    #return accs, fbetas, fmeasures, gbetas, aurocs, auprcs
-    return np.mean(accs), np.mean(fbetas), np.mean(fmeasures), np.mean(gbetas)#, np.mean(aurocs), np.mean(auprcs)
+ #       aurocs.append(auroc)
+ #       auprcs.append(auprc)
+    
+    if mode == 'mean':
+        return np.mean(accs), np.mean(fbetas), np.mean(fmeasures), np.mean(gbetas)#, np.mean(aurocs), np.mean(auprcs)
+    return accs, fbetas, fmeasures, gbetas#, aurocs, auprcs
 
 def geometry_loss(fbeta, gbeta):
     return np.sqrt(fbeta*gbeta)

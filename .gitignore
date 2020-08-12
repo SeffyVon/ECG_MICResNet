@@ -14,6 +14,6 @@ input/*
 *.npy
 *.png
 source/evaluation/
-Data/
+NewData/
 explore/
 source/runs/*

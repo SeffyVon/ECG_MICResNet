@@ -15,6 +15,10 @@ leads = ['I','II','III',
 		'aVR','aVL','aVF',
 		'V1','V2','V3',
         'V4','V5','V6']
+
+normal_class = '426783006'
+equivalent_classes = [['713427006', '59118001'], ['284470004', '63593006'], ['427172004', '17338001']]
+
 for ll in leads:
 	for lfn in lead_feature_names:
 		headers.append('{}_{}'.format(ll, lfn))
@@ -31,7 +35,13 @@ columns = np.array(columns)[sorted_idx]
 
 Dx_map = pd.read_csv('evaluation/dx_mapping_scored.csv')
 Dx_map_unscored = pd.read_csv('evaluation/dx_mapping_unscored.csv')
-labels = Dx_map['SNOMED CT Code']
+labels = Dx_map['SNOMED CT Code'].to_numpy()
 
 
 
+# equivalent_mapping
+equivalent_mapping = {}
+for class1, class2 in equivalent_classes:
+    equivalent_mapping[class1] = class2
+    
+    

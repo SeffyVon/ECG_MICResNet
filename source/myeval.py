@@ -359,7 +359,7 @@ def binary_acc(y_preds, y_tests, beta=2, mode='mean'):
     gbetas = []
     aurocs = []
     auprcs = []
-    for i in range(27):
+    for i in range(y_preds.shape[1]):
         
         # Tensor
         y_pred_prob, y_test = y_preds[:,i], y_tests[:,i]

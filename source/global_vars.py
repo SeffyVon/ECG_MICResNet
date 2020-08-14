@@ -18,6 +18,8 @@ leads = ['I','II','III',
 
 normal_class = '426783006'
 equivalent_classes = [['713427006', '59118001'], ['284470004', '63593006'], ['427172004', '17338001']]
+lad_class = '39732003'
+rad_class = '47665007'
 
 for ll in leads:
 	for lfn in lead_feature_names:

@@ -39,11 +39,11 @@ Dx_map = pd.read_csv('evaluation/dx_mapping_scored.csv')
 Dx_map_unscored = pd.read_csv('evaluation/dx_mapping_unscored.csv')
 labels = Dx_map['SNOMED CT Code'].to_numpy()
 
-
-
 # equivalent_mapping
 equivalent_mapping = {}
 for class1, class2 in equivalent_classes:
     equivalent_mapping[class1] = class2
     
+normal_idx = np.argwhere(labels==int(normal_class))
+
     

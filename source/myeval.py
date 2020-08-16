@@ -406,3 +406,32 @@ def binary_acc(y_preds, y_tests, beta=2, mode='mean'):
 
 def geometry_loss(fbeta, gbeta):
     return np.sqrt(fbeta*gbeta)
+
+from global_vars import normal_idx
+from evaluation.evaluate_12ECG_score import compute_modified_confusion_matrix, compute_challenge_metric
+def compute_score(labels, outputs, weights, class_idx=list(range(27)), normal_index=normal_idx):
+    # use a subset of class
+    weights = weights[class_idx, class_idx]
+
+    num_recordings, num_classes = np.shape(labels)
+    # Compute the observed score.
+    A = compute_modified_confusion_matrix(labels, outputs)
+    observed_score = np.nansum(weights * A)
+
+    # Compute the score for the model that always chooses the correct label(s).
+    correct_outputs = labels
+    A = compute_modified_confusion_matrix(labels, correct_outputs)
+    correct_score = np.nansum(weights * A)
+
+    # Compute the score for the model that always chooses the normal class.
+    inactive_outputs = np.zeros((num_recordings, num_classes), dtype=np.bool)
+    inactive_outputs[:, normal_index] = 1
+    A = compute_modified_confusion_matrix(labels, inactive_outputs)
+    inactive_score = np.nansum(weights * A)
+
+    if correct_score != inactive_score:
+        normalized_score = float(observed_score - inactive_score) / float(correct_score - inactive_score)
+    else:
+        normalized_score = float('nan')
+
+    return normalized_score

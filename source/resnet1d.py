@@ -75,11 +75,16 @@ class ResNetLayer(nn.Module):
         super().__init__()
         # 'We perform downsampling directly by convolutional layers that have a stride of 2.'
         downsampling = 2 if in_channels != out_channels else 1
-        self.blocks = nn.Sequential(
-            block(in_channels , in_channels, *args, **kwargs, downsampling=downsampling),
-            *[block(in_channels, in_channels, downsampling=1, *args, **kwargs) for _ in range(1, n-1)],
-            block(in_channels, out_channels, downsampling=1, *args, **kwargs) 
+        if n == 1:
+            self.blocks = nn.Sequential(
+                block(in_channels, out_channels, downsampling=1, *args, **kwargs) 
         )
+        else:
+            self.blocks = nn.Sequential(
+                block(in_channels , in_channels, *args, **kwargs, downsampling=downsampling),
+                *[block(in_channels, in_channels, downsampling=1, *args, **kwargs) for _ in range(1, n-1)],
+                block(in_channels, out_channels, downsampling=1, *args, **kwargs) 
+            )
 
     def forward(self, x):
         x = self.blocks(x)
@@ -90,15 +95,15 @@ class ResNetEncoder(nn.Module):
     ResNet encoder composed by layers with increasing features.
     """
     def __init__(self, in_channels, blocks_sizes,
-                 block, activation='relu', *args, **kwargs):
+                 block, n, activation='relu', *args, **kwargs):
         super().__init__()
         self.blocks_sizes = blocks_sizes
         
         self.gate = nn.Sequential(
-            nn.Conv1d(in_channels, blocks_sizes[0], kernel_size=9, bias=False),
+            nn.Conv1d(in_channels, blocks_sizes[0], kernel_size=7, stride=2, padding=3, bias=False),
             nn.BatchNorm1d(blocks_sizes[0]),
             activation_func(activation),
-            nn.MaxPool1d(kernel_size=3),
+            nn.MaxPool1d(kernel_size=3, stride=2, padding=1),
         )
         
         self.in_out_block_sizes = list(zip(blocks_sizes, blocks_sizes[1:]))
@@ -106,7 +111,7 @@ class ResNetEncoder(nn.Module):
             ResNetLayer(blocks_sizes[0], blocks_sizes[0], n=1, activation=activation, 
                         block=block,  *args, **kwargs),
             *[ResNetLayer(in_channels, 
-                          out_channels, n=3, activation=activation, 
+                          out_channels, n=n, activation=activation, 
                           block=block, *args, **kwargs) 
               for k, (in_channels, out_channels) in enumerate(self.in_out_block_sizes)]       
         ])
@@ -135,20 +140,67 @@ class ResnetDecoder(nn.Module):
         return x
     
 
-class ECGResNet50(nn.Module):
+class ECGResNet(nn.Module):
     
     """
-    Combining 12 lead ecg on a network
+    Combining 12 lead ecg on a network (actually not 50)
+    """
+    
+    def __init__(self, in_channels, n_classes, n=3, *args, **kwargs):
+        super().__init__()
+        self.encoder = ResNetEncoder(in_channels, block=ResNet753Block, blocks_sizes=[64, 128, 128], n=n, *args, **kwargs)
+        self.decoder = ResnetDecoder(self.encoder.blocks[-1].blocks[-1].out_channels, n_classes)
+       
+    def forward(self, x):
+        x = self.encoder(x) 
+        x = self.decoder(x)
+        return x
+
+class ResNetSharingEncoder(nn.Module):
+    """
+    ResNet encoder composed by layers with increasing features.
+    """
+    def __init__(self, in_channels, blocks_sizes,
+                 block, activation='relu', *args, **kwargs):
+        super().__init__()
+        self.blocks_sizes = blocks_sizes
+        self.in_out_block_sizes = list(zip(blocks_sizes, blocks_sizes[1:]))
+        self.blocks = nn.ModuleList([ 
+            ResNetLayer(blocks_sizes[0], blocks_sizes[0], n=1, activation=activation, 
+                        block=block,  *args, **kwargs),
+            *[ResNetLayer(in_channels, 
+                          out_channels, n=3, activation=activation, 
+                          block=block, *args, **kwargs) 
+              for k, (in_channels, out_channels) in enumerate(self.in_out_block_sizes)]       
+        ])
+        
+        
+    def forward(self, x):
+        for block in self.blocks:
+            x = block(x)
+        return x
+
+class ECGResNetSharingECG(nn.Module):
+    
+    """
+    Combining 12 lead ecg on a network (actually not 50)
+    + weight sharing between leads
     """
     
     def __init__(self, in_channels, n_classes, *args, **kwargs):
         super().__init__()
+        self.gate = nn.Sequential(
+            nn.Conv1d(in_channels, in_channels, kernel_size=9, bias=False),
+            nn.BatchNorm1d(1),
+            activation_func(activation),
+            nn.MaxPool1d(kernel_size=3),
+        )
         self.encoder = ResNetEncoder(in_channels, block=ResNet753Block, blocks_sizes=[64, 128, 128], *args, **kwargs)
         self.decoder = ResnetDecoder(self.encoder.blocks[-1].blocks[-1].out_channels, n_classes)
        
     def forward(self, x):
-        #x = self.conv1(x)
+        x = self.gate(x) 
         x = self.encoder(x) 
         x = self.decoder(x)
         return x
-    
+

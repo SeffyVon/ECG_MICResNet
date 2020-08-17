@@ -4,6 +4,7 @@ from global_vars import labels, equivalent_mapping, Dx_map, Dx_map_unscored, equ
 from MultiCWTNet import MultiCWTNet
 from ImageMultichannelDataset import ImageMultichannelDataset
 from myeval import agg_y_preds_bags, binary_acc, geometry_loss, compute_score
+from imbalanced_weights import cal_multilabel_weights, inverse_weight
 
 from pytorchtools import EarlyStopping
 from pytorch_training import add_pr_curve_tensorboard
@@ -160,21 +161,22 @@ def train_NN(headers_datasets, output_directory):
 
     st = time.time()
 
+    #train_class_weight = torch.Tensor(inverse_weight(data_img2_labels[train_idx], class_idx)).to(device)
+    #test_class_weight = torch.Tensor(inverse_weight(data_img2_labels[test_idx], class_idx)).to(device)
+
     image_datasets_train = ImageMultichannelDataset(data_imgs2, data_img2_labels, class_idx, 'train')
     image_datasets_test = ImageMultichannelDataset(data_imgs2, data_img2_labels, class_idx, 'test')
 
     trainDataset = torch.utils.data.Subset(image_datasets_train, train_idx)
     testDataset = torch.utils.data.Subset(image_datasets_test, test_idx)
 
-    del train_idx, test_idx
-
     batch_size = 64
     trainLoader = torch.utils.data.DataLoader(trainDataset, batch_size=batch_size, pin_memory=True, shuffle=True)
     testLoader = torch.utils.data.DataLoader(testDataset, batch_size=300, shuffle = False, pin_memory=True)
 
 
-    criterion_train = nn.BCEWithLogitsLoss(reduction='mean')
-    criterion_test = nn.BCEWithLogitsLoss(reduction='mean')
+    criterion_train = nn.BCEWithLogitsLoss(reduction='mean')#, weight=train_class_weight)
+    criterion_test = nn.BCEWithLogitsLoss(reduction='mean')#, weight=test_class_weight)
 
     run_name = 'modelMultiCWTFull_test'
 
@@ -186,7 +188,7 @@ def train_NN(headers_datasets, output_directory):
     model.to(device)
 
     optimizer = optim.Adam(model.parameters(), lr=0.01) 
-    scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.1, patience=20, mode='max')
+    scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.1, patience=20, mode='min')
 
     losses_train = []
     losses_test = []
@@ -272,7 +274,7 @@ def train_NN(headers_datasets, output_directory):
             epoch, (time.time()-st)/60,
             avg_loss_train, acc, fmeasure, fbeta, gbeta, geometry, score,
             avg_loss_test, acc2, fmeasure2, fbeta2, gbeta2, geometry2, score2)
-        scheduler.step(geometry2)
+        scheduler.step(avg_loss_test)
 
         writer.add_scalar('train/score',
             score,
@@ -305,7 +307,7 @@ def train_NN(headers_datasets, output_directory):
         with open(output_directory+'/loss_{}.txt'.format(run_name), 'a') as f:
             print(output_str, file=f)
 
-        early_stopping(-geometry2, model)
+        early_stopping(avg_loss_test, model)
 
         if early_stopping.early_stop:
             print("Early stopping")

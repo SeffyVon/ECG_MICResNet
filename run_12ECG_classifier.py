@@ -16,6 +16,8 @@ if torch.cuda.is_available():
 else:
     device = torch.device('cpu')
 
+torch.manual_seed(0)
+
 def get_image(data):
     
     n_segments = int(data.shape[1]/3000)
@@ -45,9 +47,9 @@ def run_12ECG_classifier(data,header_data,loaded_model):
 
     with torch.no_grad():
         model.eval()
-        imgs_tensor = img_transforms['test'](data_imgs).reshape((1,12,224,224))
+        imgs_tensor = torch.stack([img_transforms['train'](data_imgs) for _ in range(21)])
         outputs = model(imgs_tensor.to(device))
-        current_score = torch.sigmoid(outputs).cpu().numpy()[0]
+        current_score = np.max(torch.sigmoid(outputs).cpu().numpy(), axis=0)
         current_label = np.round(current_score)
     
         return current_label, current_score, classes

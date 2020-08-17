@@ -1,4 +1,3 @@
-#FROM python:3.7.3-stretch 
 FROM nvidia/cuda:10.2-cudnn7-devel
 
 ## The MAINTAINER instruction sets the Author field of the generated images
@@ -13,7 +12,6 @@ WORKDIR /physionet
 # apt-get install git-lfs; \
 # git lfs install; \
 # git lfs pull
-
 
 RUN apt-get update && apt-get upgrade -y && apt-get clean
 RUN apt-get install -y python3.7  python3-pip

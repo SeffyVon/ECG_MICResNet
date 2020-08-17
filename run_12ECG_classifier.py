@@ -20,7 +20,7 @@ torch.manual_seed(0)
 
 def get_image(data):
     
-    n_segments = int(data.shape[1]/3000)
+    n_segments = max(1,min(data.shape[1]//3000,11))
     resize = torchvision.transforms.Resize((224, n_segments*224))
     fData = filter_data(data[:,:n_segments*3000], highcut=50.0)
     

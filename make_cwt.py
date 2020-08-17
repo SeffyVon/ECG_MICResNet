@@ -66,7 +66,7 @@ def filter_data(Data, highcut=30.0):
 
 def make_cwt(recordings_datasets, output_directory):
     
-    max_num_cwt = 10
+    max_num_cwt = 1000
     for dataset in recordings_datasets.keys():
 
         print('Dataset ', dataset)

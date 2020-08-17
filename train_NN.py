@@ -4,7 +4,6 @@ from global_vars import labels, equivalent_mapping, Dx_map, Dx_map_unscored, equ
 from MultiCWTNet import MultiCWTNet
 from ImageMultichannelDataset import ImageMultichannelDataset
 from myeval import agg_y_preds_bags, binary_acc, geometry_loss, compute_score
-from imbalanced_weights import cal_multilabel_weights, inverse_weight
 
 from pytorchtools import EarlyStopping
 from pytorch_training import add_pr_curve_tensorboard
@@ -17,7 +16,7 @@ from tqdm import tqdm
 import torch, torchvision 
 from PIL import Image
 from iterstrat.ml_stratifiers import MultilabelStratifiedKFold
-from torch.utils.tensorboard import SummaryWriter
+# from torch.utils.tensorboard import SummaryWriter
 import time
 from torchvision import datasets, models, transforms
 import torch
@@ -180,7 +179,7 @@ def train_NN(headers_datasets, output_directory):
 
     run_name = 'modelMultiCWTFull_test'
 
-    early_stopping = EarlyStopping(patience=50, verbose=False, 
+    early_stopping = EarlyStopping(patience=20, verbose=False, 
                                   saved_dir=output_directory, 
                                   save_name=run_name)
 
@@ -188,16 +187,16 @@ def train_NN(headers_datasets, output_directory):
     model.to(device)
 
     optimizer = optim.Adam(model.parameters(), lr=0.01) 
-    scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.1, patience=20, mode='min')
+    scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.1, patience=30, mode='max')
 
     losses_train = []
     losses_test = []
     
-    writer = SummaryWriter(output_directory+'/runs/{}'.format(run_name))
+    # writer = SummaryWriter(output_directory+'/runs/{}'.format(run_name))
 
 
     # training
-    for epoch in range(0, 500):
+    for epoch in range(0, 200):
 
         model.train()
 
@@ -215,10 +214,10 @@ def train_NN(headers_datasets, output_directory):
             
             avg_loss_train = np.average(losses_train)
 
-            if np.mod(k, 100) == 0:
-                writer.add_scalar('train/loss',
-                avg_loss_train,
-                epoch * (len(train_idx)//batch_size//100+1) + k//100)
+            # if np.mod(k, 100) == 0:
+            #     writer.add_scalar('train/loss',
+            #     avg_loss_train,
+            #     epoch * (len(train_idx)//batch_size//100+1) + k//100)
 
             y_trains.append(y_train.cpu())
                 
@@ -243,9 +242,9 @@ def train_NN(headers_datasets, output_directory):
                 
             avg_loss_test = np.average(losses_test)
 
-            writer.add_scalar('test/loss',
-                avg_loss_test,
-                epoch)
+            # writer.add_scalar('test/loss',
+            #     avg_loss_test,
+            #     epoch)
 
 
         y_trains_tensor = torch.cat(y_trains, axis=0) # ground truth
@@ -257,9 +256,9 @@ def train_NN(headers_datasets, output_directory):
         output_tests = torch.cat(output_tests, axis=0)
         y_test_preds = torch.sigmoid(output_tests)
 
-        for class_i_idx in range(len(class_idx)):
-            add_pr_curve_tensorboard(writer, class_i_idx, y_trains_tensor, y_train_preds, names, global_step=epoch, prefix='train/')
-            add_pr_curve_tensorboard(writer, class_i_idx, y_tests_tensor, y_test_preds, names, global_step=epoch, prefix='test/')
+        # for class_i_idx in range(len(class_idx)):
+        #     add_pr_curve_tensorboard(writer, class_i_idx, y_trains_tensor, y_train_preds, names, global_step=epoch, prefix='train/')
+        #     add_pr_curve_tensorboard(writer, class_i_idx, y_tests_tensor, y_test_preds, names, global_step=epoch, prefix='test/')
 
 
 
@@ -274,40 +273,40 @@ def train_NN(headers_datasets, output_directory):
             epoch, (time.time()-st)/60,
             avg_loss_train, acc, fmeasure, fbeta, gbeta, geometry, score,
             avg_loss_test, acc2, fmeasure2, fbeta2, gbeta2, geometry2, score2)
-        scheduler.step(avg_loss_test)
+        scheduler.step(geometry2)
 
-        writer.add_scalar('train/score',
-            score,
-            epoch)
-        writer.add_scalar('train/gbeta',
-                gbeta,
-                epoch)
-        writer.add_scalar('train/fbeta',
-                fbeta,
-                epoch)
-        writer.add_scalar('train/geometry',
-                geometry,
-                epoch)
+        # writer.add_scalar('train/score',
+        #     score,
+        #     epoch)
+        # writer.add_scalar('train/gbeta',
+        #         gbeta,
+        #         epoch)
+        # writer.add_scalar('train/fbeta',
+        #         fbeta,
+        #         epoch)
+        # writer.add_scalar('train/geometry',
+        #         geometry,
+        #         epoch)
         
-        writer.add_scalar('test/score',
-                score2,
-                epoch)
-        writer.add_scalar('test/gbeta',
-                gbeta2,
-                epoch)
-        writer.add_scalar('test/fbeta',
-                fbeta2,
-                epoch)
-        writer.add_scalar('test/geometry',
-                geometry2,
-                epoch)
+        # writer.add_scalar('test/score',
+        #         score2,
+        #         epoch)
+        # writer.add_scalar('test/gbeta',
+        #         gbeta2,
+        #         epoch)
+        # writer.add_scalar('test/fbeta',
+        #         fbeta2,
+        #         epoch)
+        # writer.add_scalar('test/geometry',
+        #         geometry2,
+        #         epoch)
 
         
         print(output_str)
         with open(output_directory+'/loss_{}.txt'.format(run_name), 'a') as f:
             print(output_str, file=f)
 
-        early_stopping(avg_loss_test, model)
+        early_stopping(-geometry2, model)
 
         if early_stopping.early_stop:
             print("Early stopping")

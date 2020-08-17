@@ -36,7 +36,7 @@ def train_12ECG_classifier(input_directory, output_directory):
     print('Make CWT ...')
     #make_cwt(recordings_datasets, output_directory)
 
-    del recordings_datasets, headers, recordings
+    del recordings_datasets, headers, recordings, header_files, classes, num_classes, num_files
 
     # train and save the best model
     print('Training NN ... ')

@@ -8,6 +8,7 @@ import random
 from torchvision.transforms.transforms import _get_image_size
 from torchvision.transforms import functional as F
 
+
 class MultiRandomCrop(transforms.RandomCrop):
 
     def __init__(self, size, sub_transform, padding=None, pad_if_needed=False, fill=0, padding_mode="constant"):
@@ -83,6 +84,16 @@ class MultiCenterCrop(transforms.CenterCrop):
         """
         return torch.cat([sub_transform(F.center_crop(img, self.size)) for img in imgs], 0)
 
+
+sub_transform = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+            ])
+img_transforms = {
+            'train':  MultiRandomCrop(224, sub_transform),  
+            'test': MultiRandomCrop(224, sub_transform),
+    }
+
 class ImageMultichannelDataset(Dataset):
     """Face Landmarks dataset."""
 
@@ -93,18 +104,7 @@ class ImageMultichannelDataset(Dataset):
         """
         self.manyhot_encoding_labels = manyhot_encoding_labels
         self.channel_imgs = channel_imgs
-        sub_transform = transforms.Compose([
-                    transforms.ToTensor(),
-                    transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-                    ])
-        self.transform =  {
-            'train':  transforms.Compose([
-                                 MultiRandomCrop(224, sub_transform),
-                                 ]),  
-            'test': transforms.Compose([
-                                 MultiRandomCrop(224, sub_transform),
-                                 ])
-    }[stage] 
+        self.transform =  img_transforms[stage]
         self.class_idx = class_idx
 
     def __len__(self):

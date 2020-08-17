@@ -112,7 +112,7 @@ def train_NN(headers_datasets, output_directory):
     data_img2_labels = np.array(data_img2_labels)
     assert len(data_img2_labels) == len(Codes)
 
-    del Codes
+    
             
 
     # change to equivalent mapping
@@ -135,10 +135,10 @@ def train_NN(headers_datasets, output_directory):
             train_idx.append(idx)
         for idx in dataset_test_idx[dataset]:
             test_idx.append(idx)
+
     assert len(train_idx)+len(test_idx) == len(Codes)
 
-    del dataset_train_idx
-    del dataset_test_idx
+    del Codes, dataset_train_idx, dataset_test_idx, headers_datasets
 
     #from torch.utils.data import Dataset
     names = [get_name(label, Dx_map, Dx_map_unscored) for label in labels]
@@ -165,6 +165,9 @@ def train_NN(headers_datasets, output_directory):
 
     trainDataset = torch.utils.data.Subset(image_datasets_train, train_idx)
     testDataset = torch.utils.data.Subset(image_datasets_test, test_idx)
+
+    del train_idx, test_idx
+
     batch_size = 64
     trainLoader = torch.utils.data.DataLoader(trainDataset, batch_size=batch_size, pin_memory=True, shuffle=True)
     testLoader = torch.utils.data.DataLoader(testDataset, batch_size=300, shuffle = False, pin_memory=True)
@@ -185,11 +188,8 @@ def train_NN(headers_datasets, output_directory):
     optimizer = optim.Adam(model.parameters(), lr=0.01) 
     scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.1, patience=20, mode='max')
 
-    y_trains_tensor = None
-    y_tests_tensor = None
     losses_train = []
     losses_test = []
-
     
     #writer = SummaryWriter(output_directory+'/runs/{}'.format(run_name))
 

@@ -2,24 +2,56 @@
 import torch
 import numpy as np
 from sklearn.metrics import roc_auc_score, precision_recall_curve, auc
+from global_vars import normal_idx
 
 
+# Compute modified confusion matrix for multi-class, multi-label tasks.
+def compute_modified_confusion_matrix(labels, outputs):
+    # Compute a binary multi-class, multi-label confusion matrix, where the rows
+    # are the labels and the columns are the outputs.
+    num_recordings, num_classes = np.shape(labels)
+    A = np.zeros((num_classes, num_classes))
 
-# The compute_beta_score function computes the Fbeta-measure given an specific beta value
-# and the G value define at the begining of the file.
-#
-# Inputs:
-#   'labels' are the true classes of the recording
-#
-#   'output' are the output classes of your model
-#
-#   'beta' is the weight
-#
-# Outputs:
-#
-# fbeta_measure, Fbeta measure given an specific beta
-# Gbeta_measure, Generalization of the Jaccard measure with a beta weigth
-#
+    # Iterate over all of the recordings.
+    for i in range(num_recordings):
+        # Calculate the number of positive labels and/or outputs.
+        normalization = float(max(np.sum(np.any((labels[i, :], outputs[i, :]), axis=0)), 1))
+        # Iterate over all of the classes.
+        for j in range(num_classes):
+            # Assign full and/or partial credit for each positive class.
+            if labels[i, j]:
+                for k in range(num_classes):
+                    if outputs[i, k]:
+                        A[j, k] += 1.0/normalization
+
+    return A
+
+# Compute the evaluation metric for the Challenge.
+def compute_challenge_metric(weights, labels, outputs, classes, normal_class):
+    num_recordings, num_classes = np.shape(labels)
+    normal_index = classes.index(normal_class)
+
+    # Compute the observed score.
+    A = compute_modified_confusion_matrix(labels, outputs)
+    observed_score = np.nansum(weights * A)
+
+    # Compute the score for the model that always chooses the correct label(s).
+    correct_outputs = labels
+    A = compute_modified_confusion_matrix(labels, correct_outputs)
+    correct_score = np.nansum(weights * A)
+
+    # Compute the score for the model that always chooses the normal class.
+    inactive_outputs = np.zeros((num_recordings, num_classes), dtype=np.bool)
+    inactive_outputs[:, normal_index] = 1
+    A = compute_modified_confusion_matrix(labels, inactive_outputs)
+    inactive_score = np.nansum(weights * A)
+
+    if correct_score != inactive_score:
+        normalized_score = float(observed_score - inactive_score) / float(correct_score - inactive_score)
+    else:
+        normalized_score = float('nan')
+
+    return normalized_score
 
 def compute_beta_score(labels, output, beta, num_classes, check_errors=True):
 
@@ -352,14 +384,14 @@ def binary_acc_mic(y_preds, y_tests, beta=2):
     #return accs, fbetas, fmeasures, gbetas, aurocs, auprcs
     return np.mean(accs), np.mean(fbetas), np.mean(fmeasures), np.mean(gbetas), np.mean(aurocs), np.mean(auprcs)
 
-def binary_acc(y_preds, y_tests, beta=2):
+def binary_acc(y_preds, y_tests, beta=2, mode='mean'):
     accs = []
     fmeasures = []
     fbetas = []
     gbetas = []
     aurocs = []
     auprcs = []
-    for i in range(9):
+    for i in range(y_preds.shape[1]):
         
         # Tensor
         y_pred_prob, y_test = y_preds[:,i], y_tests[:,i]
@@ -379,7 +411,7 @@ def binary_acc(y_preds, y_tests, beta=2):
             y_test_numpy = y_test.data.numpy()
             y_pred_prob_numpy = y_pred_prob.data.numpy()
     
-        auroc, auprc = binary_acc_core(y_test_numpy, y_pred_prob_numpy)
+  #      auroc, auprc = binary_acc_core(y_test_numpy, y_pred_prob_numpy)
         # old way to cal acc:
         #correct_results_sum = (y_pred_tag == y_test).sum().float()
         #acc = true_positives/y_test.shape[0]
@@ -397,7 +429,39 @@ def binary_acc(y_preds, y_tests, beta=2):
         fbetas.append(fbeta)#.data.cpu().numpy())
         fmeasures.append(fmeasure)
         gbetas.append(gbeta)
-        aurocs.append(auroc)
-        auprcs.append(auprc)
-    #return accs, fbetas, fmeasures, gbetas, aurocs, auprcs
-    return np.mean(accs), np.mean(fbetas), np.mean(fmeasures), np.mean(gbetas), np.mean(aurocs), np.mean(auprcs)
+ #       aurocs.append(auroc)
+ #       auprcs.append(auprc)
+    
+    if mode == 'mean':
+        return np.mean(accs), np.mean(fbetas), np.mean(fmeasures), np.mean(gbetas)#, np.mean(aurocs), np.mean(auprcs)
+    return accs, fbetas, fmeasures, gbetas#, aurocs, auprcs
+
+def geometry_loss(fbeta, gbeta):
+    return np.sqrt(fbeta*gbeta)
+
+def compute_score(labels, outputs, weights, class_idx=list(range(27)), normal_index=normal_idx):
+    # use a subset of class
+    weights = weights[class_idx, class_idx]
+
+    num_recordings, num_classes = np.shape(labels)
+    # Compute the observed score.
+    A = compute_modified_confusion_matrix(labels, outputs)
+    observed_score = np.nansum(weights * A)
+
+    # Compute the score for the model that always chooses the correct label(s).
+    correct_outputs = labels
+    A = compute_modified_confusion_matrix(labels, correct_outputs)
+    correct_score = np.nansum(weights * A)
+
+    # Compute the score for the model that always chooses the normal class.
+    inactive_outputs = np.zeros((num_recordings, num_classes), dtype=np.bool)
+    inactive_outputs[:, normal_index] = 1
+    A = compute_modified_confusion_matrix(labels, inactive_outputs)
+    inactive_score = np.nansum(weights * A)
+
+    if correct_score != inactive_score:
+        normalized_score = float(observed_score - inactive_score) / float(correct_score - inactive_score)
+    else:
+        normalized_score = float('nan')
+
+    return normalized_score

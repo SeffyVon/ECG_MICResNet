@@ -28,15 +28,15 @@ for ll in leads:
 #labels = ['AF', 'I-AVB', 'LBBB', 'Normal', 'PAC', 'PVC', 'RBBB', 'STD', 'STE']
 
 import pandas as pd
-weights_csv = pd.read_csv('evaluation/weights.csv')
+weights_csv = pd.read_csv('weights.csv')
 columns = [int(idx) for idx in weights_csv.keys()[1:]]
 weights = weights_csv.iloc[:,1:].to_numpy()
 sorted_idx = np.argsort(columns)
 weights = weights_csv.iloc[sorted_idx,sorted_idx+1].to_numpy()
 columns = np.array(columns)[sorted_idx]
 
-Dx_map = pd.read_csv('evaluation/dx_mapping_scored.csv')
-Dx_map_unscored = pd.read_csv('evaluation/dx_mapping_unscored.csv')
+Dx_map = pd.read_csv('dx_mapping_scored.csv')
+Dx_map_unscored = pd.read_csv('dx_mapping_unscored.csv')
 labels = Dx_map['SNOMED CT Code'].to_numpy()
 
 # equivalent_mapping

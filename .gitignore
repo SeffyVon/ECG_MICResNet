@@ -1,12 +1,12 @@
 .ipynb_checkpoints/
 *.zip
 Training_WFDB/*
-output/*
+output*
 *.DS_Store
 *.sav
 __pycache__/*
 saved/*
-input/*
+input*
 *.txt
 *.pyc
 *.csv

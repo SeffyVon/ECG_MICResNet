@@ -14,7 +14,7 @@ data_path_dict = {
     'data_imgs_dataset2_2' :'../saved/data_imgs_dataset2_2.pkl',
     'data_imgs_dataset2_new' :'../saved/data_imgs_dataset2_new.pkl',
 }
-def read_file(name, default_saved_path=False):
+def read_file(name, default_saved_path=False, verbose=False):
     res = None
     saved_path = None
 
@@ -32,10 +32,11 @@ def read_file(name, default_saved_path=False):
         with open(saved_path, 'rb') as saved_file:
             res = pickle.load(saved_file)
 
-    print('read from', saved_path)
+    if verbose:
+        print('read from', saved_path)
     return res
 
-def write_file(name, obj, default_saved_path=False):
+def write_file(name, obj, default_saved_path=False, verbose=False):
 
     saved_path = None
     if name[-4:] in ['.npy', '.pkl']:
@@ -52,5 +53,5 @@ def write_file(name, obj, default_saved_path=False):
     else:
         with open(saved_path, 'wb') as saved_file:
             pickle.dump(obj, saved_file)
-
-    print('saved at', saved_path)
+    if verbose:
+        print('saved at', saved_path)

@@ -6,6 +6,7 @@ from sklearn.impute import SimpleImputer
 from sklearn.ensemble import RandomForestClassifier
 from make_cwt import make_cwt
 from train_NN import get_dataset, train_NN
+from pkl_split import pkl_split
 
 def train_12ECG_classifier(input_directory, output_directory):
     # Load data.
@@ -34,7 +35,8 @@ def train_12ECG_classifier(input_directory, output_directory):
 
     # make cwt
     print('Make CWT ...')
-    make_cwt(recordings_datasets, output_directory)
+    #pkl_split(headers_datasets)
+    make_cwt(recordings_datasets, headers_datasets, output_directory)
 
     del recordings_datasets, headers, recordings, header_files, classes, num_classes, num_files
 

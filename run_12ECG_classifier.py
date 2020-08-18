@@ -47,7 +47,7 @@ def run_12ECG_classifier(data,header_data,loaded_model):
 
     with torch.no_grad():
         model.eval()
-        imgs_tensor = torch.stack([img_transforms['train'](data_imgs) for _ in range(21)])
+        imgs_tensor = torch.stack([img_transforms['result'](data_imgs) for _ in range(21)])
         outputs = model(imgs_tensor.to(device))
         current_score = np.max(torch.sigmoid(outputs).cpu().numpy(), axis=0)
         current_label = np.round(current_score)

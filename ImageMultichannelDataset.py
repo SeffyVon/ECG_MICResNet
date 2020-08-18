@@ -91,7 +91,8 @@ sub_transform = transforms.Compose([
             ])
 img_transforms = {
             'train':  MultiRandomCrop(224, sub_transform),  
-            'test': MultiRandomCrop(224, sub_transform),
+            'test': MultiCenterCrop(224, sub_transform),
+            'result': MultiRandomCrop(224, sub_transform),
     }
 
 class ImageMultichannelDataset(Dataset):

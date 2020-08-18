@@ -4,7 +4,7 @@ import numpy as np, os, sys
 from global_vars import labels
 from get_12ECG_features import get_12ECG_features
 from MultiCWTNet import MultiCWTNet
-from ImageMultichannelDataset import img_transforms
+from IdvImageDataset import img_transforms
 import torch
 import torchvision
 from PIL import Image

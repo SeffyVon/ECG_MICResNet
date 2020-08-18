@@ -63,12 +63,7 @@ class MultiRandomCrop(transforms.RandomCrop):
         if self.pad_if_needed and img.size[1] < self.size[0]:
             img = F.pad(img, (0, self.size[0] - img.size[1]), self.fill, self.padding_mode)
 
-        i, j, h, w = None, None, None, None
-        try:
-            i, j, h, w = self.get_params(img, self.size)
-        except:
-            print("self.size", self.size, i, j, h, w)
-
+        i, j, h, w = self.get_params(img, self.size)
         
         return torch.cat([self.sub_transform(F.crop(img, i, j, h, w)) for img in imgs], 0)
 

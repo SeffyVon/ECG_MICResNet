@@ -2,7 +2,7 @@
 from manipulations import get_classes_from_header, get_scored_class, get_name
 from global_vars import labels, equivalent_mapping, Dx_map, Dx_map_unscored, equivalent_mapping, normal_class, weights
 from MultiCWTNet import MultiCWTNet
-from ImageMultichannelDataset import ImageMultichannelDataset
+from IdvImageDataset import IdvImageDataset
 from myeval import agg_y_preds_bags, binary_acc, geometry_loss, compute_score
 
 from pytorchtools import EarlyStopping
@@ -38,7 +38,7 @@ def cv_split(headers_datasets):
     dataset_test_idx = {}
     
     datasets = np.sort(list(headers_datasets.keys()))
-
+    filenames = []
     global_idx = 0
     for dataset in datasets:
         print('Dataset ', dataset)
@@ -50,8 +50,10 @@ def cv_split(headers_datasets):
         for i, header_data in tqdm(enumerate(headers_dataset)):
             
             codes = get_classes_from_header(header_data)
+            filename = header_data[0].split(' ')[0]
             data_labels = get_scored_class(codes, labels)
             Codes.append(codes)
+            filenames.append(filename)
             
             dataset_data_labels[dataset].append(data_labels)
             dataset_idx[dataset].append(global_idx)
@@ -64,7 +66,7 @@ def cv_split(headers_datasets):
         dataset_test_idx[dataset] = test_idx + dataset_idx[dataset][0]
         
         print('Done.')
-    return Codes, dataset_data_labels, dataset_train_idx, dataset_test_idx
+    return Codes, dataset_train_idx, dataset_test_idx, filenames
 
 def get_dataset(headers, recordings):
 
@@ -92,18 +94,9 @@ def get_dataset(headers, recordings):
 
 def train_NN(headers_datasets, output_directory):
 
-    Codes, _, dataset_train_idx, dataset_test_idx = cv_split(headers_datasets)
+    Codes, dataset_train_idx, dataset_test_idx, filenames = cv_split(headers_datasets)
 
     datasets = np.sort(list(headers_datasets.keys()))
-
-    # load CWT
-    data_imgs2 = []
-    for dataset in tqdm(datasets):
-        data_imgs = read_file(output_directory +'/data_imgs_dataset{}.pkl'.format(dataset))
-        print(len(data_imgs))
-        data_imgs2 += data_imgs
-    assert len(data_imgs2) == len(Codes)
-
 
     # agg labels
     data_img2_labels = []
@@ -112,8 +105,6 @@ def train_NN(headers_datasets, output_directory):
     data_img2_labels = np.array(data_img2_labels)
     assert len(data_img2_labels) == len(Codes)
 
-    
-            
 
     # change to equivalent mapping
     key_idxes = []
@@ -140,7 +131,6 @@ def train_NN(headers_datasets, output_directory):
 
     del Codes, dataset_train_idx, dataset_test_idx, headers_datasets
 
-    #from torch.utils.data import Dataset
     names = [get_name(label, Dx_map, Dx_map_unscored) for label in labels]
     class_idx = np.argwhere(np.sum(np.array(data_img2_labels)[train_idx],axis=0)!=0).flatten() 
     names = np.array(names)[class_idx]
@@ -160,18 +150,22 @@ def train_NN(headers_datasets, output_directory):
 
     st = time.time()
 
-    #train_class_weight = torch.Tensor(inverse_weight(data_img2_labels[train_idx], class_idx)).to(device)
-    #test_class_weight = torch.Tensor(inverse_weight(data_img2_labels[test_idx], class_idx)).to(device)
+   # train_class_weight = torch.Tensor(inverse_weight(data_img2_labels[train_idx], class_idx)).to(device)
+   # test_class_weight = torch.Tensor(inverse_weight(data_img2_labels[test_idx], class_idx)).to(device)
 
-    image_datasets_train = ImageMultichannelDataset(data_imgs2, data_img2_labels, class_idx, 'train')
-    image_datasets_test = ImageMultichannelDataset(data_imgs2, data_img2_labels, class_idx, 'test')
+    image_datasets_train = IdvImageDataset(output_directory, filenames, data_img2_labels, 
+        class_idx, 'train')
+    image_datasets_test = IdvImageDataset(output_directory, filenames, data_img2_labels, 
+        class_idx, 'test')
 
     trainDataset = torch.utils.data.Subset(image_datasets_train, train_idx)
     testDataset = torch.utils.data.Subset(image_datasets_test, test_idx)
 
     batch_size = 64
-    trainLoader = torch.utils.data.DataLoader(trainDataset, batch_size=batch_size, pin_memory=True, shuffle=True)
-    testLoader = torch.utils.data.DataLoader(testDataset, batch_size=300, shuffle = False, pin_memory=True)
+    trainLoader = torch.utils.data.DataLoader(trainDataset, batch_size=batch_size, pin_memory=True, shuffle=True,
+                                              num_workers=8)
+    testLoader = torch.utils.data.DataLoader(testDataset, batch_size=300, shuffle = False, pin_memory=True,
+                                              num_workers=8)
 
 
     criterion_train = nn.BCEWithLogitsLoss(reduction='mean')#, weight=train_class_weight)
@@ -179,7 +173,7 @@ def train_NN(headers_datasets, output_directory):
 
     run_name = 'modelMultiCWTFull_test'
 
-    early_stopping = EarlyStopping(patience=20, verbose=False, 
+    early_stopping = EarlyStopping(patience=50, verbose=False, 
                                   saved_dir=output_directory, 
                                   save_name=run_name)
 
@@ -187,7 +181,7 @@ def train_NN(headers_datasets, output_directory):
     model.to(device)
 
     optimizer = optim.Adam(model.parameters(), lr=0.01) 
-    scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.1, patience=30, mode='max')
+    scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.1, patience=20, mode='max')
 
     losses_train = []
     losses_test = []
@@ -196,7 +190,7 @@ def train_NN(headers_datasets, output_directory):
 
 
     # training
-    for epoch in range(0, 200):
+    for epoch in range(0, 500):
 
         model.train()
 

@@ -64,25 +64,30 @@ def filter_data(Data, highcut=30.0):
 
 
 
-def make_cwt(recordings_datasets, output_directory):
-    
+def make_cwt(recordings_datasets, headers_datasets, output_directory):
+
+    if not os.path.isdir(output_directory + '/cwt'):
+        os.mkdir(output_directory+ '/cwt')
+
     max_num_cwt = 1000
     for dataset in recordings_datasets.keys():
 
         print('Dataset ', dataset)
 
-
         # compute CWT every #max_num_cwt(1000) recordings
         # 0-1000, 1000-2000, 2000-3000, ..., num(input_files)
         recordings = recordings_datasets[dataset]
+        headers = headers_datasets[dataset]
         num_files = len(recordings) 
         print("#recordings: ", num_files)
         K = num_files // max_num_cwt
         for k in tqdm(range(K+1), leave=False):
-            data_imgs = []
             for i in tqdm(range(k*max_num_cwt, (k+1)*max_num_cwt), leave=False):
                 if i < num_files:
                     data = recordings[i]
+                    header = headers[i]
+                    filename = header[0].split(' ')[0]
+
                     n_segments = max(1,min(data.shape[1]//3000,11))
                     resize = torchvision.transforms.Resize((224, n_segments*224))
                     
@@ -92,26 +97,12 @@ def make_cwt(recordings_datasets, output_directory):
 
                     coef = cwt(fData, width=40) 
                     coef = coef.transpose((1,2,0))
-                    data_img0 = Image.fromarray((coef[:,:,:3] * 255).astype(np.uint8)) 
+
+                    data_img0 = Image.fromarray((coef[:,:,:3] * 255).astype(np.uint8))
                     data_img1 = Image.fromarray((coef[:,:,3:6] * 255).astype(np.uint8)) 
                     data_img2 = Image.fromarray((coef[:,:,6:9] * 255).astype(np.uint8)) 
                     data_img3 = Image.fromarray((coef[:,:,9:12] * 255).astype(np.uint8)) 
-                    data_imgs.append([resize(data_img0), 
-                                      resize(data_img1), 
-                                      resize(data_img2), 
-                                      resize(data_img3)])
-            write_file(output_directory + '/data_imgs_dataset{}_{}.pkl'.format(dataset, k), 
-                       data_imgs)
+                    write_file(output_directory+ '/cwt/' + filename + '.pkl',
+                        [resize(data_img0), resize(data_img1), resize(data_img2), resize(data_img3)])
 
-        # aggregate CWTs
-        data_imgs = []
-        for k in range(K+1):
-            data_imgs += read_file(output_directory + '/data_imgs_dataset{}_{}.pkl'.format(dataset, k))
-        
-        # saved
-        write_file(output_directory + '/data_imgs_dataset{}.pkl'.format(dataset), 
-                   data_imgs)
-
-        del data_imgs
-        
         print('Done.')

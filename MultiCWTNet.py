@@ -1,5 +1,6 @@
 from torch import nn
 from torchvision import models
+from resnet1d import ECGResNet
 
 class MultiCWTNet(nn.Module):
     def __init__(self, n_classes, verbose=False):
@@ -46,3 +47,20 @@ class MultiCWTNet(nn.Module):
         new_m.weight = nn.Parameter(new_m.weight)
 
         return new_m
+
+class ECGNet(nn.Module):
+
+    def __init__(self, n_classes):
+        super(ECGNet, self).__init__()
+        
+        self.cwt_model = MultiCWTNet(n_classes)
+        self.sig_model = ECGResNet(12, n_classes)
+        self.fc = nn.Linear(n_classes, n_classes)
+
+    def forward(self, cwt, sig):
+        x1 = self.cwt_model(cwt)
+        x2 = self.sig_model(sig)
+        return x1 + x2
+
+
+

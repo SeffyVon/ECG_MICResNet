@@ -3,12 +3,12 @@
 import numpy as np, os, sys
 from global_vars import labels
 from get_12ECG_features import get_12ECG_features
-from MultiCWTNet import MultiCWTNet
-from IdvImageDataset import img_transforms
+from resnet1d import ECGResNet
 import torch
 import torchvision
 from PIL import Image
-from make_cwt import filter_data, cwt
+from write_signal import filter_data, write_signal
+import random
 
 device = None
 if torch.cuda.is_available():
@@ -17,47 +17,55 @@ else:
     device = torch.device('cpu')
 
 torch.manual_seed(0)
+random.seed(0)
+def get_sig(data):
+    
+    fData = filter_data(data[:12,:], highcut=50.0)
+    
+    return fData
 
-def get_image(data):
-    
-    n_segments = max(1,min(data.shape[1]//3000,11))
-    resize = torchvision.transforms.Resize((224, n_segments*224))
-    fData = filter_data(data[:,:n_segments*3000], highcut=50.0)
-    
-    coef = cwt(fData, width=40) 
-    coef = coef.transpose((1,2,0))
-    
-    data_img0 = Image.fromarray((coef[:,:,:3] * 255).astype(np.uint8)) 
-    data_img1 = Image.fromarray((coef[:,:,3:6] * 255).astype(np.uint8)) 
-    data_img2 = Image.fromarray((coef[:,:,6:9] * 255).astype(np.uint8)) 
-    data_img3 = Image.fromarray((coef[:,:,9:12] * 255).astype(np.uint8)) 
-    data_imgs = [resize(data_img0), 
-                  resize(data_img1), 
-                  resize(data_img2), 
-                  resize(data_img3)]
-    
-    return data_imgs
+def segment_sig(fData, mode='random'):
+    j_sig = 0
+    if mode == 'random':
+        j_sig = random.randint(0, min(max(fData.shape[1] - 3000,1), 33000))
+    else:
+        j_sig = max(0, (fData.shape[1]-3000)//2) # center
 
-def run_12ECG_classifier(data,header_data,loaded_model):
+    fData2 = fData[:,j_sig:j_sig+3000]
+    if fData2.shape[1] != 3000:
+            fData2 = np.pad(fData2, pad_width=((0,0),(0,3000-fData2.shape[1])), 
+                mode='constant', constant_values=0)
+
+    return fData2
+
+def run_12ECG_classifier(data,header_data,loaded_model, mode='random'):
 
     # Use your classifier here to obtain a label and score for each class.
     model = loaded_model['model']
     classes = loaded_model['classes']
-    data_imgs = get_image(data)
-
+    fData = get_sig(data)
     with torch.no_grad():
         model.eval()
-        imgs_tensor = torch.stack([img_transforms['result'](data_imgs) for _ in range(21)])
-        outputs = model(imgs_tensor.to(device))
-        current_score = np.max(torch.sigmoid(outputs).cpu().numpy(), axis=0)
-        current_label = np.round(current_score)
+        current_score = None
+        if mode == 'random':
+            sig_tensor = torch.from_numpy(np.array([segment_sig(fData, mode) for _ in range(21)])).type(torch.FloatTensor)
+            outputs = model(sig_tensor.to(device))
+            current_score = np.max(torch.sigmoid(outputs).cpu().numpy(), axis=0)
+
+        else: # center
+            sig_tensor = torch.from_numpy(np.array([segment_sig(fData, mode)])).type(torch.FloatTensor)
+            #print(sig_tensor.shape)
+            outputs = model(sig_tensor.to(device))
+            current_score = torch.sigmoid(outputs).cpu().numpy()[0]     
+        current_label = np.round(current_score).astype(int)
     
         return current_label, current_score, classes
 
 def load_trained_model(model_saved_path):
-    model = MultiCWTNet(len(labels), verbose=False).to(device)
+    model = ECGResNet(12, len(labels)).to(device)
     # load saved model
-    model.load_state_dict(torch.load(model_saved_path+'/modelMultiCWTFull_test_model.dict'))#, map_location=torch.device('cpu')))
+    run_name = 'modelMultiCWTFull_test_sigOnly'
+    model.load_state_dict(torch.load(model_saved_path+'/{}_model.dict'.format(run_name)))#, map_location=torch.device('cpu')))
     return model
 
 def load_12ECG_model(input_directory):

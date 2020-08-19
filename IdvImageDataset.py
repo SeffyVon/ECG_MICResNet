@@ -42,7 +42,7 @@ class MultiRandomCrop(transforms.RandomCrop):
 
         i = random.randint(0, h - th)
         j = random.randint(0, w - tw)
-        return i, j, th, tw
+        return 0, j, th, tw
 
     def __call__(self, imgs):
         """

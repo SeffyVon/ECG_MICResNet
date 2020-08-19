@@ -100,9 +100,9 @@ def write_signal(recordings_datasets, headers_datasets, output_directory, disabl
 
                     fData = None
                     if np.sum(data) != 0:
-                        fData = filter_data(data[:12,:], highcut=50.0)
+                        fData = filter_data(data[:12,:33000], highcut=50.0)
                     else:
-                        fData = np.zeros((12, data.shape[1]), dtype=np.float64)
+                        fData = np.zeros((12, min(data.shape[1],33000)), dtype=np.float64)
                     # fDatas.append(fData)
                     if not os.path.exists(sig_file):
                         write_file(sig_file, fData)

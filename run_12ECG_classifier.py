@@ -27,7 +27,7 @@ def get_sig(data):
 def segment_sig(fData, mode='random'):
     j_sig = 0
     if mode == 'random':
-        j_sig = random.randint(0, max(fData.shape[1] - 3000,1))
+        j_sig = random.randint(0, min(max(fData.shape[1] - 3000,1), 33000))
     else:
         j_sig = max(0, (fData.shape[1]-3000)//2) # center
 

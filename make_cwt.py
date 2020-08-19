@@ -8,6 +8,7 @@ import numpy as np
 import os, sys
 from manipulations import get_classes, get_classes_from_header, get_Fs_from_header, load_challenge_data
 from saved_data_io import read_file, write_file
+from global_vars import disable_tqdm
 import pywt
 from scipy import signal 
 
@@ -64,13 +65,17 @@ def filter_data(Data, highcut=30.0):
 
 
 
-def make_cwt(recordings_datasets, headers_datasets, output_directory):
+def make_cwt(recordings_datasets, headers_datasets, output_directory, disable_tqdm=disable_tqdm):
 
     if not os.path.isdir(output_directory + '/cwt'):
         os.mkdir(output_directory+ '/cwt')
-
-    max_num_cwt = 1000
-    for dataset in recordings_datasets.keys():
+    if not os.path.isdir(output_directory + '/sig'):
+        os.mkdir(output_directory+ '/sig')
+    max_num_cwt = 10000
+    datasets = np.sort(list(headers_datasets.keys()))
+    
+    # fDatas = []
+    for dataset in datasets:
 
         print('Dataset ', dataset)
 
@@ -81,28 +86,42 @@ def make_cwt(recordings_datasets, headers_datasets, output_directory):
         num_files = len(recordings) 
         print("#recordings: ", num_files)
         K = num_files // max_num_cwt
-        for k in tqdm(range(K+1), leave=False):
-            for i in tqdm(range(k*max_num_cwt, (k+1)*max_num_cwt), leave=False):
+        for k in tqdm(range(K+1), leave=False, disable=disable_tqdm):
+            for i in tqdm(range(k*max_num_cwt, (k+1)*max_num_cwt), leave=False, disable=disable_tqdm):
                 if i < num_files:
-                    data = recordings[i]
+                    
                     header = headers[i]
                     filename = header[0].split(' ')[0]
+                    cwt_file = output_directory + '/cwt/' + filename + '.pkl'
+                    sig_file = output_directory + '/sig/' + filename + '.npy'
 
+                    if os.path.exists(sig_file) and os.path.exists(cwt_file):
+                        continue
+                    data = recordings[i]
                     n_segments = max(1,min(data.shape[1]//3000,11))
-                    resize = torchvision.transforms.Resize((224, n_segments*224))
-                    
-                    fData = np.zeros((data.shape[0], n_segments*3000))
+
+                    fData = None
                     if np.sum(data) != 0:
-                        fData = filter_data(data[:,:n_segments*3000], highcut=50.0)
+                        fData = filter_data(data[:12,:n_segments*3000], highcut=50.0)
+                    else:
+                        fData = np.zeros((12, n_segments*3000), dtype=np.float64)
+                    # fDatas.append(fData)
+                    if not os.path.exists(sig_file):
+                        write_file(sig_file, fData)
+                    
+                    if not os.path.exists(cwt_file):
+                        resize = torchvision.transforms.Resize((224, n_segments*224))
+                    
+                        coef = cwt(fData, width=40) 
+                        coef = coef.transpose((1,2,0))
 
-                    coef = cwt(fData, width=40) 
-                    coef = coef.transpose((1,2,0))
-
-                    data_img0 = Image.fromarray((coef[:,:,:3] * 255).astype(np.uint8))
-                    data_img1 = Image.fromarray((coef[:,:,3:6] * 255).astype(np.uint8)) 
-                    data_img2 = Image.fromarray((coef[:,:,6:9] * 255).astype(np.uint8)) 
-                    data_img3 = Image.fromarray((coef[:,:,9:12] * 255).astype(np.uint8)) 
-                    write_file(output_directory+ '/cwt/' + filename + '.pkl',
-                        [resize(data_img0), resize(data_img1), resize(data_img2), resize(data_img3)])
-
+                        data_img0 = Image.fromarray((coef[:,:,:3] * 255).astype(np.uint8))
+                        data_img1 = Image.fromarray((coef[:,:,3:6] * 255).astype(np.uint8)) 
+                        data_img2 = Image.fromarray((coef[:,:,6:9] * 255).astype(np.uint8)) 
+                        data_img3 = Image.fromarray((coef[:,:,9:12] * 255).astype(np.uint8)) 
+                        write_file(cwt_file,
+                            [resize(data_img0), resize(data_img1), resize(data_img2), resize(data_img3)])
+                    
+                    
         print('Done.')
+    # return fDatas

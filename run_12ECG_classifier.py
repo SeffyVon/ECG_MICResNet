@@ -4,7 +4,7 @@ import numpy as np, os, sys
 from global_vars import labels
 from get_12ECG_features import get_12ECG_features
 from MultiCWTNet import MultiCWTNet
-from IdvImageDataset import img_transforms
+from IdvImageSigDataset import img_transforms
 import torch
 import torchvision
 from PIL import Image
@@ -18,7 +18,7 @@ else:
 
 torch.manual_seed(0)
 
-def get_image(data):
+def get_image_and_sig(data):
     
     n_segments = max(1,min(data.shape[1]//3000,11))
     resize = torchvision.transforms.Resize((224, n_segments*224))
@@ -36,20 +36,28 @@ def get_image(data):
                   resize(data_img2), 
                   resize(data_img3)]
     
-    return data_imgs
+    return data_imgs, fData
 
 def run_12ECG_classifier(data,header_data,loaded_model):
 
     # Use your classifier here to obtain a label and score for each class.
     model = loaded_model['model']
     classes = loaded_model['classes']
-    data_imgs = get_image(data)
+    data_imgs, fData = get_image(data)
 
+    # center
+    j = min(max((w - 224 ) //2, 0), w-224)
+    j_sig = max(0, min(int(j/224 * 3000), fData.shape[1]-3000))
+
+    if fData[:,j_sig:j_sig+3000].shape[1] != 3000:
+            fData = np.pad(fData, pad_width=((0,0),(0,3000-fData.shape[1])), 
+                mode='constant', constant_values=0)
+        
     with torch.no_grad():
         model.eval()
         imgs_tensor = torch.stack([img_transforms['result'](data_imgs) for _ in range(21)])
-        outputs = model(imgs_tensor.to(device))
-        current_score = np.max(torch.sigmoid(outputs).cpu().numpy(), axis=0)
+        outputs = model(imgs_tensor.to(device), fData[:,j_sig:j_sig+3000].to(device))
+        current_score = torch.sigmoid(outputs).cpu().numpy()
         current_label = np.round(current_score)
     
         return current_label, current_score, classes

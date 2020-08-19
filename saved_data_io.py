@@ -1,4 +1,5 @@
 import pickle
+import numpy as np
 
 data_path_dict = {
     'Q_locs': '../saved/newData_Q_locs_1000_7000_peakdist100.pkl',

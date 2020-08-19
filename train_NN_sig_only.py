@@ -51,7 +51,7 @@ def cv_split(headers_datasets):
         for i, header_data in tqdm(enumerate(headers_dataset), disable=disable_tqdm):
             
             codes = get_classes_from_header(header_data)
-            filename = header_data[0].split(' ')[0]
+            filename = header_data[0].split(' ')[0].split('.')[0]
             data_labels = get_scored_class(codes, labels)
 
             Codes.append(codes)

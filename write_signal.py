@@ -65,10 +65,10 @@ def filter_data(Data, highcut=30.0):
 
 
 
-def make_cwt(recordings_datasets, headers_datasets, output_directory, disable_tqdm=disable_tqdm):
+def write_signal(recordings_datasets, headers_datasets, output_directory, disable_tqdm=disable_tqdm):
 
-    if not os.path.isdir(output_directory + '/cwt'):
-        os.mkdir(output_directory+ '/cwt')
+    # if not os.path.isdir(output_directory + '/cwt'):
+    #     os.mkdir(output_directory+ '/cwt')
     if not os.path.isdir(output_directory + '/sig'):
         os.mkdir(output_directory+ '/sig')
     max_num_cwt = 10000
@@ -91,37 +91,21 @@ def make_cwt(recordings_datasets, headers_datasets, output_directory, disable_tq
                 if i < num_files:
                     
                     header = headers[i]
-                    filename = header[0].split(' ')[0]
-                    cwt_file = output_directory + '/cwt/' + filename + '.pkl'
+                    filename = header[0].split(' ')[0].split('.')[0]
                     sig_file = output_directory + '/sig/' + filename + '.npy'
 
-                    if os.path.exists(sig_file) and os.path.exists(cwt_file):
+                    if os.path.exists(sig_file):
                         continue
                     data = recordings[i]
-                    n_segments = max(1,min(data.shape[1]//3000,11))
 
                     fData = None
                     if np.sum(data) != 0:
-                        fData = filter_data(data[:12,:n_segments*3000], highcut=50.0)
+                        fData = filter_data(data[:12,:], highcut=50.0)
                     else:
-                        fData = np.zeros((12, n_segments*3000), dtype=np.float64)
+                        fData = np.zeros((12, data.shape[1]), dtype=np.float64)
                     # fDatas.append(fData)
                     if not os.path.exists(sig_file):
                         write_file(sig_file, fData)
-                    
-                    if not os.path.exists(cwt_file):
-                        resize = torchvision.transforms.Resize((224, n_segments*224))
-                    
-                        coef = cwt(fData, width=40) 
-                        coef = coef.transpose((1,2,0))
-
-                        data_img0 = Image.fromarray((coef[:,:,:3] * 255).astype(np.uint8))
-                        data_img1 = Image.fromarray((coef[:,:,3:6] * 255).astype(np.uint8)) 
-                        data_img2 = Image.fromarray((coef[:,:,6:9] * 255).astype(np.uint8)) 
-                        data_img3 = Image.fromarray((coef[:,:,9:12] * 255).astype(np.uint8)) 
-                        write_file(cwt_file,
-                            [resize(data_img0), resize(data_img1), resize(data_img2), resize(data_img3)])
-                    
                     
         print('Done.')
     # return fDatas

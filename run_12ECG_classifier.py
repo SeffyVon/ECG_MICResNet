@@ -7,7 +7,8 @@ from resnet1d import ECGResNet
 import torch
 import torchvision
 from PIL import Image
-from make_cwt import filter_data, cwt
+from write_signal import filter_data, write_signal
+import random
 
 device = None
 if torch.cuda.is_available():
@@ -19,15 +20,14 @@ torch.manual_seed(0)
 
 def get_sig(data):
     
-    n_segments = max(1,min(data.shape[1]//3000,11))
-    fData = filter_data(data[:,:n_segments*3000], highcut=50.0)
+    fData = filter_data(data[:12,:], highcut=50.0)
     
     return fData
 
 def segment_sig(fData, mode='random'):
     j_sig = 0
     if mode == 'random':
-        j_sig = random.randint(0, fData.shape[1] - 224)
+        j_sig = random.randint(0, max(fData.shape[1] - 3000,1))
     else:
         j_sig = max(0, (fData.shape[1]-3000)//2) # center
 
@@ -38,7 +38,7 @@ def segment_sig(fData, mode='random'):
 
     return fData2
 
-def run_12ECG_classifier(data,header_data,loaded_model, mode='center'):
+def run_12ECG_classifier(data,header_data,loaded_model, mode='random'):
 
     # Use your classifier here to obtain a label and score for each class.
     model = loaded_model['model']
@@ -57,7 +57,7 @@ def run_12ECG_classifier(data,header_data,loaded_model, mode='center'):
             #print(sig_tensor.shape)
             outputs = model(sig_tensor.to(device))
             current_score = torch.sigmoid(outputs).cpu().numpy()[0]     
-        current_label = np.round(current_score)
+        current_label = np.round(current_score).astype(int)
     
         return current_label, current_score, classes
 

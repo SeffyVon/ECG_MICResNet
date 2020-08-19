@@ -2,7 +2,7 @@
 
 import numpy as np, os, sys
 from scipy.io import loadmat
-from make_cwt import make_cwt
+from write_signal import write_signal
 from train_NN_sig_only import get_dataset, train_NN_sig_only
 #from train_NN_sig import get_dataset, train_NN_sig
 #from train_NN import get_dataset, train_NN
@@ -39,8 +39,8 @@ def train_12ECG_classifier(input_directory, output_directory):
     #headers_datasets = get_dataset(headers, None)
 
     # make cwt
-    print('Make CWT ...')
-    make_cwt(recordings_datasets, headers_datasets, output_directory)
+    print('Write signal ...')
+    write_signal(recordings_datasets, headers_datasets, output_directory)
 
     del recordings_datasets 
     del headers, header_files, num_files

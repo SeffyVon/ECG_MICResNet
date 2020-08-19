@@ -102,6 +102,7 @@ def get_dataset(headers, recordings=None):
                 headers_datasets[dataset] = [header]
         return headers_datasets        
 
+from saved_data_io import write_file
 
 def train_NN_sig_only(headers_datasets, output_directory):
 
@@ -174,9 +175,9 @@ def train_NN_sig_only(headers_datasets, output_directory):
 
     batch_size = 64
     trainLoader = torch.utils.data.DataLoader(trainDataset, batch_size=batch_size, pin_memory=True, shuffle=True,
-                                              num_workers=16)
+                                              num_workers=8)
     testLoader = torch.utils.data.DataLoader(testDataset, batch_size=300, shuffle = False, pin_memory=True,
-                                              num_workers=16)
+                                              num_workers=8)
 
 
     criterion_train = nn.BCEWithLogitsLoss(reduction='mean')#, weight=train_class_weight)
@@ -313,7 +314,7 @@ def train_NN_sig_only(headers_datasets, output_directory):
                     epoch)
 
         
-        print(output_str)
+        print(output_str)        
         with open(output_directory+'/loss_{}.txt'.format(run_name), 'a') as f:
             print(output_str, file=f)
 

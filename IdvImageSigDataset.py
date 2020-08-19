@@ -5,6 +5,7 @@ import os
 import numbers
 from typing import Tuple
 import random
+random.seed(0)
 from torchvision.transforms.transforms import _get_image_size
 from torchvision.transforms import functional as F
 import numpy as np

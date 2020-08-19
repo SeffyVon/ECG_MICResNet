@@ -17,7 +17,7 @@ else:
     device = torch.device('cpu')
 
 torch.manual_seed(0)
-
+random.seed(0)
 def get_sig(data):
     
     fData = filter_data(data[:12,:], highcut=50.0)

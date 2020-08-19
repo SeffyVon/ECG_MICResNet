@@ -153,7 +153,7 @@ def train_NN_sig_only(headers_datasets, output_directory):
     # get device
     device = None
     if torch.cuda.is_available():
-        device = torch.device('cuda:1')
+        device = torch.device('cuda:0')
     else:
         device = torch.device('cpu')
 

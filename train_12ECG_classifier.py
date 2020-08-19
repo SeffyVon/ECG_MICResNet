@@ -3,8 +3,8 @@
 import numpy as np, os, sys
 from scipy.io import loadmat
 from make_cwt import make_cwt
-#from train_NN_sig_only import get_dataset, train_NN_sig_only
-from train_NN_sig import get_dataset, train_NN_sig
+from train_NN_sig_only import get_dataset, train_NN_sig_only
+#from train_NN_sig import get_dataset, train_NN_sig
 #from train_NN import get_dataset, train_NN
 
 def train_12ECG_classifier(input_directory, output_directory):
@@ -34,7 +34,7 @@ def train_12ECG_classifier(input_directory, output_directory):
     # Train model.
     print('Training and saving model...')
     headers_datasets, recordings_datasets = get_dataset(headers, recordings)
-    
+
     #del recordings, headers, header_files, num_files
     #headers_datasets = get_dataset(headers, None)
 
@@ -48,7 +48,7 @@ def train_12ECG_classifier(input_directory, output_directory):
     # train and save the best model
     print('Training NN ... ')
     #train_NN(headers_datasets, output_directory)
-    train_NN_sig(headers_datasets, output_directory)
+    train_NN_sig_only(headers_datasets, output_directory)
 
 # Load challenge data.
 def load_challenge_data(header_file):

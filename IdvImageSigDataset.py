@@ -47,7 +47,7 @@ class IdvImageSigDataset(Dataset):
             j = random.randint(0, w - 224)
         else:
             # central crop
-            j = min(max((w - 224 ) //2, 0), w-224)
+            j = max((w - 224 ) //2, 0)
 
         j_sig = max(0, min(int(j/224 * 3000), fData.shape[1]-3000))
         if fData[:,j_sig:j_sig+3000].shape[1] != 3000:
@@ -90,14 +90,14 @@ class IdvSigDataset(Dataset):
         if self.stage in ['train', 'result']:
             j_sig = random.randint(0, max(fData.shape[1] - 3000, 0))
         else:
-            j_sig = min(max((fData.shape[1] - 3000 ) //2, 0), 
-                fData.shape[1] -3000)
+            j_sig = max((fData.shape[1] - 3000 ) //2, 0)
 
         if fData[:,j_sig:j_sig+3000].shape[1] != 3000:
             #print('error:', idx, j_sig, fData.shape[1], fData[:,j_sig:j_sig+3000].shape[1])
             fData = np.pad(fData, pad_width=((0,0),(0,3000-fData.shape[1])), mode='constant', constant_values=0)
             #print(fData.shape)
-            #print('error[after]:', fData.shape[1], fData[:,j_sig:j_sig+3000].shape[1])
+            #if self.stage == 'test':
+             #   print('error[after]:', fData.shape[1], fData[:,j_sig:j_sig+3000].shape[1])
         # if fData[:,j_sig:j_sig+3000].shape[0] != 12:
         #     print('error:', idx, filename, fData.shape[0])
         #     pass

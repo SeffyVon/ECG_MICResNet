@@ -123,7 +123,7 @@ def train_NN_sig_MIL(headers_datasets, output_directory):
 
 
     # training
-    for epoch in range(0, 500):
+    for epoch in range(0, 80):
 
         model.train()
 

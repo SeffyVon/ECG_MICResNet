@@ -3,7 +3,6 @@
 """
 import torch
 from torch import nn
-from torchvision import models
 
 from functools import partial
 class Conv1dAuto(nn.Conv1d):
@@ -123,6 +122,39 @@ class ResNetEncoder(nn.Module):
             x = block(x)
         return x
 
+class ResNetEncoderFixed(nn.Module):
+    """
+    ResNet encoder composed by layers with increasing features.
+    """
+    def __init__(self, in_channels, blocks_sizes,
+                 block, n, activation='relu', *args, **kwargs):
+        super().__init__()
+        self.blocks_sizes = blocks_sizes
+        
+        self.gate = nn.Sequential(
+            nn.Conv1d(in_channels, blocks_sizes[0], kernel_size=7, stride=2, padding=3, bias=False),
+            nn.BatchNorm1d(blocks_sizes[0]),
+            activation_func(activation),
+            nn.MaxPool1d(kernel_size=3, stride=2, padding=1),
+        )
+        
+        self.in_out_block_sizes = list(zip(blocks_sizes[1:-1], blocks_sizes[2:]))
+        self.blocks = nn.ModuleList([ 
+            ResNetLayer(blocks_sizes[0], blocks_sizes[1], n=1, activation=activation, 
+                        block=block,  *args, **kwargs),
+            *[ResNetLayer(in_channels, 
+                          out_channels, n=n, activation=activation, 
+                          block=block, *args, **kwargs) 
+              for k, (in_channels, out_channels) in enumerate(self.in_out_block_sizes)]       
+        ])
+        
+        
+    def forward(self, x):
+        x = self.gate(x)
+        for block in self.blocks:
+            x = block(x)
+        return x
+
 class ResnetDecoder(nn.Module):
     """
     This class represents the tail of ResNet. It performs a global pooling and maps the output to the
@@ -146,9 +178,9 @@ class ECGResNet(nn.Module):
     Combining 12 lead ecg on a network (actually not 50)
     """
     
-    def __init__(self, in_channels, n_classes, n=3, *args, **kwargs):
+    def __init__(self, in_channels, n_classes, n=3, blocks_sizes=[64, 128, 128], *args, **kwargs):
         super().__init__()
-        self.encoder = ResNetEncoder(in_channels, block=ResNet753Block, blocks_sizes=[64, 128, 128], n=n, *args, **kwargs)
+        self.encoder = ResNetEncoder(in_channels, block=ResNet753Block, blocks_sizes=blocks_sizes, n=n, *args, **kwargs)
         self.decoder = ResnetDecoder(self.encoder.blocks[-1].blocks[-1].out_channels, n_classes)
        
     def forward(self, x):
@@ -156,51 +188,99 @@ class ECGResNet(nn.Module):
         x = self.decoder(x)
         return x
 
-class ResNetSharingEncoder(nn.Module):
-    """
-    ResNet encoder composed by layers with increasing features.
-    """
-    def __init__(self, in_channels, blocks_sizes,
-                 block, activation='relu', *args, **kwargs):
+class ECGFeatureResNet(nn.Module):
+    def __init__(self, in_channels, n_features, n_classes, 
+            blocks_sizes=[64, 128, 256], verbose=False):
         super().__init__()
-        self.blocks_sizes = blocks_sizes
-        self.in_out_block_sizes = list(zip(blocks_sizes, blocks_sizes[1:]))
-        self.blocks = nn.ModuleList([ 
-            ResNetLayer(blocks_sizes[0], blocks_sizes[0], n=1, activation=activation, 
-                        block=block,  *args, **kwargs),
-            *[ResNetLayer(in_channels, 
-                          out_channels, n=3, activation=activation, 
-                          block=block, *args, **kwargs) 
-              for k, (in_channels, out_channels) in enumerate(self.in_out_block_sizes)]       
-        ])
-        
-        
-    def forward(self, x):
-        for block in self.blocks:
-            x = block(x)
+        self.resnet_encoder = nn.Sequential(
+            ResNetEncoder(in_channels, block=ResNet753Block, 
+            blocks_sizes=blocks_sizes, n=3),
+            nn.AdaptiveAvgPool1d((1,)),
+        )
+        self.feature_encoder = nn.Sequential(
+            nn.Linear(n_features,n_features),
+            nn.Dropout(0.5),
+            nn.ReLU(inplace=True),
+            )
+        self.decoder = nn.Linear(blocks_sizes[-1] + n_features, n_classes)
+        self.verbose = verbose
+
+
+    def forward(self, x1, x2):
+        x1 = self.resnet_encoder(x1)
+        if self.verbose:
+            print("x1.shape", x1.shape)
+        x1 = x1.view((x1.shape[0], x1.shape[1]*x1.shape[2]))
+        if self.verbose:
+            print("x1.shape", x1.shape)
+        x2 = self.feature_encoder(x2)
+        if self.verbose:
+            print("x2.shape", x2.shape)
+        x = torch.cat([x1, x2], 1)
+        if self.verbose:
+            print("x.shape", x.shape)
+        x = self.decoder(x)
         return x
 
-class ECGResNetSharingECG(nn.Module):
+import torch.nn.functional as F
+class ECGBagResNet(nn.Module):
     
     """
     Combining 12 lead ecg on a network (actually not 50)
-    + weight sharing between leads
     """
     
-    def __init__(self, in_channels, n_classes, *args, **kwargs):
+    def __init__(self, in_channels, n_classes, n_segments, n=3,
+            blocks_sizes=[64, 128, 128], verbose=False):
         super().__init__()
-        self.gate = nn.Sequential(
-            nn.Conv1d(in_channels, in_channels, kernel_size=9, bias=False),
-            nn.BatchNorm1d(1),
-            activation_func(activation),
-            nn.MaxPool1d(kernel_size=3),
+        encoder_dim = blocks_sizes[-1]
+        D = encoder_dim//2
+        K = encoder_dim//4
+        self.encoder = nn.Sequential(
+            ResNetEncoder(in_channels, block=ResNet753Block, 
+            blocks_sizes=blocks_sizes, n=3),
+            nn.AdaptiveAvgPool1d((1,)),
         )
-        self.encoder = ResNetEncoder(in_channels, block=ResNet753Block, blocks_sizes=[64, 128, 128], *args, **kwargs)
-        self.decoder = ResnetDecoder(self.encoder.blocks[-1].blocks[-1].out_channels, n_classes)
-       
-    def forward(self, x):
-        x = self.gate(x) 
-        x = self.encoder(x) 
-        x = self.decoder(x)
-        return x
+        
+        self.attention = nn.Sequential(
+            nn.Linear(encoder_dim, D),
+            nn.Tanh(),
+            nn.Linear(D, K)
+        )
+        self.decoder = nn.Linear(4096, n_classes)
+
+        self.verbose = verbose
+        self.n_segments = n_segments
+
+    def forward(self, xs):
+        H = [self.encoder(xs[:,i,:,:]).view((xs.shape[0],-1,1)) for i in range(self.n_segments)]
+        if self.verbose:
+            print("0 H[0].shape", H[0].shape)
+        H = torch.cat(H, dim=2) # batch x channels x n_segments 
+        if self.verbose:
+            print("cat H.shape", H.shape)
+        H = torch.transpose(H, 1, 2) # batch x n_segments x channels 
+        if self.verbose:
+            print("transpose H.shape", H.shape)
+
+
+        A = self.attention(H) # batch x n_segments x channels_out
+        if self.verbose:
+            print("attention A.shape", A.shape)
+        A = torch.transpose(A, 1, 2) # batch  x channels_out x n_segments
+        if self.verbose:
+            print("transpose A.shape", A.shape)
+        A = F.softmax(A, dim=1) # batch  x channels_out x n_segments
+        if self.verbose:
+            print("softmax A.shape", A.shape)
+
+
+        M = torch.bmm(A, H)
+        if self.verbose:
+            print("bmm M.shape", M.shape)
+        M = M.view(M.size(0), -1)
+        if self.verbose:
+            print("view M.shape", M.shape)
+        y_prob = self.decoder(M)
+        return y_prob    
+
 

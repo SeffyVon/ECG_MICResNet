@@ -1,113 +1,38 @@
 
-from manipulations import get_classes_from_header, get_scored_class, get_name
-from global_vars import labels, equivalent_mapping, Dx_map, Dx_map_unscored, equivalent_mapping, \
-    normal_class, weights, disable_tqdm, enable_writer
-from MultiCWTNet import ECGNet
-from IdvImageSigDataset import IdvImageSigDataset
+from manipulations import get_scored_class, get_name, cv_split
+from global_vars import labels, equivalent_mapping, Dx_map, Dx_map_unscored, \
+    normal_class, weights, disable_tqdm, enable_writer, run_name
+from resnet1d import ECGResNet
+from dataset import IdvSigFeatureDataset
 from myeval import agg_y_preds_bags, binary_acc, geometry_loss, compute_score
 
-from pytorchtools import EarlyStopping
-from pytorch_training import add_pr_curve_tensorboard
+from pytorchtools import EarlyStopping, add_pr_curve_tensorboard
 from saved_data_io import read_file 
-
+from sklearn.preprocessing import normalize
+from sklearn.impute import SimpleImputer
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from tqdm import tqdm
-import torch, torchvision 
-from PIL import Image
+import torch
 from iterstrat.ml_stratifiers import MultilabelStratifiedKFold
 if enable_writer:
     from torch.utils.tensorboard import SummaryWriter
 import time
-from torchvision import datasets, models, transforms
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.optim import lr_scheduler
 
-
-def cv_split(headers_datasets):
-    """
-    80-20 stratified CV split across each dataset
-    """
-    
-    Codes = []
-    
-    dataset_idx = {}
-    dataset_data_labels = {} # encoding
-    dataset_train_idx = {}
-    dataset_test_idx = {}
-    
-    datasets = np.sort(list(headers_datasets.keys()))
-    filenames = []
-    global_idx = 0
-    for dataset in datasets:
-        print('Dataset ', dataset)
-        headers_dataset = headers_datasets[dataset]
-        num_files = len(headers_dataset)
-        dataset_idx[dataset] = []
-        dataset_data_labels[dataset] = []
-        for i, header_data in tqdm(enumerate(headers_dataset), disable=disable_tqdm):
-            
-            codes = get_classes_from_header(header_data)
-            filename = header_data[0].split(' ')[0]
-            data_labels = get_scored_class(codes, labels)
-
-            Codes.append(codes)
-            filenames.append(filename)
-            
-            dataset_data_labels[dataset].append(data_labels)
-            dataset_idx[dataset].append(global_idx)
-            global_idx += 1
-        
-        kf = MultilabelStratifiedKFold(5, random_state=0)
-        train_idx, test_idx = next(kf.split(np.array(dataset_data_labels[dataset]), np.array(dataset_data_labels[dataset])))
-        dataset_train_idx[dataset] = train_idx +  dataset_idx[dataset][0]
-        dataset_test_idx[dataset] = test_idx + dataset_idx[dataset][0]
-        
-        print('Done.')
-    return Codes, dataset_train_idx, dataset_test_idx, filenames
-
-def get_dataset(headers, recordings=None):
-
-    dataset_mapping = {
-        'A': 1,
-        'Q': 2,
-        'I': 3,
-        'S': 4,
-        'H': 5,
-        'E': 6
-    }
-    if recordings is not None:
-        headers_datasets = {}
-        recordings_datasets = {}
-        for i, (header, recording) in enumerate(zip(headers, recordings)):
-            dataset = dataset_mapping[header[0].split(' ')[0][0]]
-            if dataset in headers_datasets:
-                headers_datasets[dataset].append(header)
-                recordings_datasets[dataset].append(recording)
-            else:
-                headers_datasets[dataset] = [header]
-                recordings_datasets[dataset] = [recording]
-        return headers_datasets, recordings_datasets
-
-    else:
-        headers_datasets = {}
-        for i, header in enumerate(headers):
-            dataset = dataset_mapping[header[0].split(' ')[0][0]]
-            if dataset in headers_datasets:
-                headers_datasets[dataset].append(header)
-            else:
-                headers_datasets[dataset] = [header]
-        return headers_datasets        
-
-
-def train_NN_sig(headers_datasets, output_directory):
+def train_NN_sig_feature(headers_datasets, output_directory, features):
 
     Codes, dataset_train_idx, dataset_test_idx, filenames = cv_split(headers_datasets)
 
-
+    
+    imputer=SimpleImputer().fit(features)
+    features=imputer.transform(features)
+    features = normalize(features, axis=0)
+    print("features", features.shape)
     datasets = np.sort(list(headers_datasets.keys()))
 
     # agg labels
@@ -138,7 +63,9 @@ def train_NN_sig(headers_datasets, output_directory):
         for idx in dataset_test_idx[dataset]:
             test_idx.append(idx)
 
-    assert len(train_idx)+len(test_idx) == len(Codes)
+    assert len(np.unique(train_idx))+len(np.unique(test_idx)) == len(Codes)
+    assert len(np.unique(train_idx+test_idx)) == len(Codes)
+    print('CV split checked')
 
     del Codes, dataset_train_idx, dataset_test_idx, headers_datasets
 
@@ -164,13 +91,13 @@ def train_NN_sig(headers_datasets, output_directory):
    # train_class_weight = torch.Tensor(inverse_weight(data_img2_labels[train_idx], class_idx)).to(device)
    # test_class_weight = torch.Tensor(inverse_weight(data_img2_labels[test_idx], class_idx)).to(device)
 
-    image_datasets_train = IdvImageSigDataset(output_directory, filenames, data_img2_labels, 
+    sig_datasets_train = IdvSigFeatureDataset(output_directory, filenames, features, data_img2_labels, 
         class_idx, 'train')
-    image_datasets_test = IdvImageSigDataset(output_directory, filenames, data_img2_labels, 
+    sig_datasets_test = IdvSigFeatureDataset(output_directory, filenames, features, data_img2_labels, 
         class_idx, 'test')
 
-    trainDataset = torch.utils.data.Subset(image_datasets_train, train_idx)
-    testDataset = torch.utils.data.Subset(image_datasets_test, test_idx)
+    trainDataset = torch.utils.data.Subset(sig_datasets_train, train_idx)
+    testDataset = torch.utils.data.Subset(sig_datasets_test, test_idx)
 
     batch_size = 64
     trainLoader = torch.utils.data.DataLoader(trainDataset, batch_size=batch_size, pin_memory=True, shuffle=True,
@@ -182,13 +109,15 @@ def train_NN_sig(headers_datasets, output_directory):
     criterion_train = nn.BCEWithLogitsLoss(reduction='mean')#, weight=train_class_weight)
     criterion_test = nn.BCEWithLogitsLoss(reduction='mean')#, weight=test_class_weight)
 
-    run_name = 'modelMultiCWTFull_test_addSig'
-
     early_stopping = EarlyStopping(patience=50, verbose=False, 
                                   saved_dir=output_directory, 
                                   save_name=run_name)
 
-    model = ECGNet(len(class_idx))
+    model = ECGFeatureResNet(12, 14, len(class_idx))
+
+    with open(output_directory + '/ECGFeatureResNet_' + run_name + '.txt', 'w') as f:
+        print(model, file=f)
+
     model.to(device)
 
     optimizer = optim.Adam(model.parameters(), lr=0.01) 
@@ -208,41 +137,43 @@ def train_NN_sig(headers_datasets, output_directory):
 
         y_trains = [] # ground truth
         output_trains = [] # output
-        for k, (X_train, X_sig_train, y_train) in tqdm(enumerate(trainLoader), desc='train', disable=disable_tqdm):
-            X_train = X_train.to(device)
-            X_sig_train = X_sig_train.to(device)
-            y_train = y_train.to(device)
+        with tqdm(enumerate(trainLoader), desc='train', disable=disable_tqdm) as tqdm0:
+            for k, (X_sig_train, X_feature_train, y_train) in tqdm0:
+                X_sig_train = X_sig_train.to(device)
+                X_feature_train = X_feature_train.to(device)
+                y_train = y_train.to(device)
 
-            optimizer.zero_grad()
-            output_train = model(X_train, X_sig_train)
-            output_trains.append(output_train.cpu())
-            
-            loss_train = criterion_train(output_train, y_train)
-            losses_train.append(loss_train.item())
-            
-            avg_loss_train = np.average(losses_train)
-
-            if enable_writer:
-                if np.mod(k, 100) == 0:
-                    writer.add_scalar('train/loss',
-                    avg_loss_train,
-                    epoch * (len(train_idx)//batch_size//100+1) + k//100)
-
-            y_trains.append(y_train.cpu())
+                optimizer.zero_grad()
+                output_train = model(X_sig_train, X_feature_train)
+                output_trains.append(output_train.cpu())
                 
-            loss_train.backward()
-            optimizer.step()
+                loss_train = criterion_train(output_train, y_train)
+                losses_train.append(loss_train.item())
+                
+                avg_loss_train = np.average(losses_train)
+
+                if enable_writer:
+                    if np.mod(k, 100) == 0:
+                        writer.add_scalar('train/loss',
+                        avg_loss_train,
+                        epoch * (len(train_idx)//batch_size//100+1) + k//100)
+
+                y_trains.append(y_train.cpu())
+                tqdm0.set_postfix(loss=avg_loss_train)
+                    
+                loss_train.backward()
+                optimizer.step()
                 
         y_tests = [] # ground truth
         output_tests = [] # output
         with torch.no_grad():
             model.eval()
             
-            for X_test, X_sig_test, y_test in tqdm(testLoader, desc='test', disable=disable_tqdm):  
+            for X_sig_test, X_feature_test, y_test in tqdm(testLoader, desc='test', disable=disable_tqdm):  
                 y_test = y_test.to(device)
                 X_sig_test = X_sig_test.to(device)
-                X_test = X_test.to(device)
-                output_test = model(X_test, X_sig_test)
+                X_feature_test = X_feature_test.to(device)
+                output_test = model(X_sig_test, X_feature_test)
 
                 loss_test = criterion_test(output_test, y_test)
                 losses_test.append(loss_test.item())
@@ -315,7 +246,7 @@ def train_NN_sig(headers_datasets, output_directory):
                     epoch)
 
         
-        print(output_str)
+        print(output_str)        
         with open(output_directory+'/loss_{}.txt'.format(run_name), 'a') as f:
             print(output_str, file=f)
 

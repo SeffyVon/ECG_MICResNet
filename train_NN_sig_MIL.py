@@ -1,9 +1,9 @@
 
 from manipulations import get_scored_class, get_name, cv_split
 from global_vars import labels, equivalent_mapping, Dx_map, Dx_map_unscored, \
-    normal_class, weights, disable_tqdm, enable_writer, run_name
-from resnet1d import ECGResNet
-from dataset import IdvSigDataset
+    normal_class, weights, disable_tqdm, enable_writer, run_name, n_segments
+from resnet1d import ECGBagResNet
+from dataset import BagSigDataset
 from myeval import agg_y_preds_bags, binary_acc, geometry_loss, compute_score
 
 from pytorchtools import EarlyStopping, add_pr_curve_tensorboard
@@ -23,7 +23,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.optim import lr_scheduler
 
-def train_NN_sig_only(headers_datasets, output_directory):
+def train_NN_sig_MIL(headers_datasets, output_directory):
 
     Codes, dataset_train_idx, dataset_test_idx, filenames = cv_split(headers_datasets)
 
@@ -85,33 +85,35 @@ def train_NN_sig_only(headers_datasets, output_directory):
    # train_class_weight = torch.Tensor(inverse_weight(data_img2_labels[train_idx], class_idx)).to(device)
    # test_class_weight = torch.Tensor(inverse_weight(data_img2_labels[test_idx], class_idx)).to(device)
 
-    sig_datasets_train = IdvSigDataset(output_directory, filenames, data_img2_labels, 
-        class_idx, 'train')
-    sig_datasets_test = IdvSigDataset(output_directory, filenames, data_img2_labels, 
-        class_idx, 'test')
+    sig_datasets_train = BagSigDataset(output_directory, filenames, data_img2_labels, 
+        class_idx, 'train', n_segments)
+    sig_datasets_test = BagSigDataset(output_directory, filenames, data_img2_labels, 
+        class_idx, 'test', n_segments)
 
     trainDataset = torch.utils.data.Subset(sig_datasets_train, train_idx)
     testDataset = torch.utils.data.Subset(sig_datasets_test, test_idx)
 
     batch_size = 64
-    trainLoader = torch.utils.data.DataLoader(trainDataset, batch_size=batch_size, pin_memory=True, shuffle=True,
-                                              num_workers=8)
-    testLoader = torch.utils.data.DataLoader(testDataset, batch_size=300, shuffle = False, pin_memory=True,
-                                              num_workers=8)
+    trainLoader = torch.utils.data.DataLoader(trainDataset, batch_size=batch_size, pin_memory=True, shuffle=True)
+    testLoader = torch.utils.data.DataLoader(testDataset, batch_size=300, shuffle=False, pin_memory=True)
 
 
     criterion_train = nn.BCEWithLogitsLoss(reduction='mean')#, weight=train_class_weight)
     criterion_test = nn.BCEWithLogitsLoss(reduction='mean')#, weight=test_class_weight)
 
-    early_stopping = EarlyStopping(patience=50, verbose=False, 
+    early_stopping = EarlyStopping(patience=30, verbose=False, 
                                   saved_dir=output_directory, 
                                   save_name=run_name)
 
-    model = ECGResNet(12, len(class_idx))
+    model = ECGBagResNet(12, len(class_idx), n_segments)
+
+    with open(output_directory + '/ECGBagResNet' + run_name + '.txt', 'w') as f:
+        print(model, file=f)
+
     model.to(device)
 
     optimizer = optim.Adam(model.parameters(), lr=0.01) 
-    scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.1, patience=20, mode='min')
+    scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.1, patience=10, mode='min')
 
     losses_train = []
     losses_test = []
@@ -127,29 +129,31 @@ def train_NN_sig_only(headers_datasets, output_directory):
 
         y_trains = [] # ground truth
         output_trains = [] # output
-        for k, (X_sig_train, y_train) in tqdm(enumerate(trainLoader), desc='train', disable=disable_tqdm):
-            X_sig_train = X_sig_train.to(device)
-            y_train = y_train.to(device)
+        with tqdm(enumerate(trainLoader), desc='train', disable=disable_tqdm) as tqdm0:
+            for k, (X_sig_train, y_train) in tqdm0:
+                X_sig_train = X_sig_train.to(device)
+                y_train = y_train.to(device)
 
-            optimizer.zero_grad()
-            output_train = model(X_sig_train)
-            output_trains.append(output_train.cpu())
-            
-            loss_train = criterion_train(output_train, y_train)
-            losses_train.append(loss_train.item())
-            
-            avg_loss_train = np.average(losses_train)
-
-            if enable_writer:
-                if np.mod(k, 100) == 0:
-                    writer.add_scalar('train/loss',
-                    avg_loss_train,
-                    epoch * (len(train_idx)//batch_size//100+1) + k//100)
-
-            y_trains.append(y_train.cpu())
+                optimizer.zero_grad()
+                output_train = model(X_sig_train)
+                output_trains.append(output_train.cpu())
                 
-            loss_train.backward()
-            optimizer.step()
+                loss_train = criterion_train(output_train, y_train)
+                losses_train.append(loss_train.item())
+                
+                avg_loss_train = np.average(losses_train)
+
+                if enable_writer:
+                    if np.mod(k, 100) == 0:
+                        writer.add_scalar('train/loss',
+                        avg_loss_train,
+                        epoch * (len(train_idx)//batch_size//100+1) + k//100)
+
+                y_trains.append(y_train.cpu())
+                tqdm0.set_postfix(loss=avg_loss_train)
+
+                loss_train.backward()
+                optimizer.step()
                 
         y_tests = [] # ground truth
         output_tests = [] # output

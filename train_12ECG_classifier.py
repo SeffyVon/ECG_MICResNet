@@ -31,15 +31,14 @@ def train_12ECG_classifier(input_directory, output_directory):
 
     # make cwt
     print('Write signal ...')
-    fDatas = write_signal(recordings_datasets, headers_datasets, output_directory)
+    write_signal(recordings_datasets, headers_datasets, output_directory)
 
     del recordings_datasets 
     del headers, header_files, num_files
 
     # train and save the best model
     print('Training NN ... ')
-    #train_NN_sig_feature(headers_datasets, output_directory, features)
-    train_NN_sig_MIL(headers_datasets, output_directory, fDatas)
+    train_NN_sig_MIL(headers_datasets, output_directory)
 
 # Load challenge data.
 def load_challenge_data(header_file):

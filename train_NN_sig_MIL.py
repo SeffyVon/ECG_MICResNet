@@ -23,7 +23,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.optim import lr_scheduler
 
-def train_NN_sig_MIL(headers_datasets, output_directory, fDatas):
+def train_NN_sig_MIL(headers_datasets, output_directory):
 
     Codes, dataset_train_idx, dataset_test_idx, filenames = cv_split(headers_datasets)
 
@@ -85,9 +85,9 @@ def train_NN_sig_MIL(headers_datasets, output_directory, fDatas):
    # train_class_weight = torch.Tensor(inverse_weight(data_img2_labels[train_idx], class_idx)).to(device)
    # test_class_weight = torch.Tensor(inverse_weight(data_img2_labels[test_idx], class_idx)).to(device)
 
-    sig_datasets_train = BagSigDataset(fDatas, data_img2_labels, 
+    sig_datasets_train = BagSigDataset(output_directory, filenames, data_img2_labels, 
         class_idx, 'train', n_segments)
-    sig_datasets_test = BagSigDataset(fDatas, data_img2_labels, 
+    sig_datasets_test = BagSigDataset(output_directory, filenames, data_img2_labels, 
         class_idx, 'test', n_segments)
 
     trainDataset = torch.utils.data.Subset(sig_datasets_train, train_idx)

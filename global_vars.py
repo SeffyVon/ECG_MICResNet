@@ -47,7 +47,5 @@ normal_idx = np.argwhere(labels==int(normal_class))
 
 disable_tqdm = True
 enable_writer = False
-# run_name = 'ECGBagResNet_trial0_MIL_7segs_submission'
-# n_segments = 7
 run_name = 'ECGBagResNet_trial0_MIL_5segs'
 n_segments = 5

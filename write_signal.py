@@ -37,11 +37,16 @@ def filter_data(Data, highcut):
 
 
 
-def write_signal(recordings_datasets, output_directory, 
+
+
+def write_signal(recordings_datasets, headers_datasets, output_directory, 
     disable_tqdm=disable_tqdm, features=False):
 
-    datasets = np.sort(list(recordings_datasets.keys()))
-    fDatas = []
+    if not os.path.isdir(output_directory + '/sig'):
+        os.mkdir(output_directory+ '/sig')
+
+    datasets = np.sort(list(headers_datasets.keys()))
+    features = []
     for dataset in datasets:
 
         print('Dataset ', dataset)
@@ -49,20 +54,25 @@ def write_signal(recordings_datasets, output_directory,
         # compute CWT every #max_num_cwt(1000) recordings
         # 0-1000, 1000-2000, 2000-3000, ..., num(input_files)
         recordings = recordings_datasets[dataset]
+        headers = headers_datasets[dataset]
         num_files = len(recordings)
         print("#recordings: ", num_files)
         for i in tqdm(range(num_files), leave=False, disable=disable_tqdm):
+            header = headers[i]
+            filename = header[0].split(' ')[0].split('.')[0]
+            sig_file = output_directory + '/sig/' + filename + '.npy'
+
             data = recordings[i]
 
-            fData = None
-            if np.sum(data) != 0:
-                fData = filter_data(data[:12,:], highcut=50.0)
-            else:
-                fData = np.zeros((12, data.shape[1]), dtype=np.float64)
+            if not os.path.exists(sig_file):
+                fData = None
+                if np.sum(data) != 0:
+                    fData = filter_data(data[:12,:], highcut=50.0)
+                else:
+                    fData = np.zeros((12, data.shape[1]), dtype=np.float64)
 
-            fDatas.append(fData)
+                write_file(sig_file, fData)
             
                     
         print('Done.')
         
-    return fDatas

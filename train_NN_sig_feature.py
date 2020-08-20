@@ -1,9 +1,9 @@
 
-from manipulations import get_classes_from_header, get_scored_class, get_name
-from global_vars import labels, equivalent_mapping, Dx_map, Dx_map_unscored, equivalent_mapping, \
+from manipulations import get_scored_class, get_name, cv_split
+from global_vars import labels, equivalent_mapping, Dx_map, Dx_map_unscored, \
     normal_class, weights, disable_tqdm, enable_writer, run_name
-from resnet1d import ECGFeatureResNet
-from IdvSigDataset import IdvSigDataset, IdvSigFeatureDataset
+from resnet1d import ECGResNet
+from dataset import IdvSigFeatureDataset
 from myeval import agg_y_preds_bags, binary_acc, geometry_loss, compute_score
 
 from pytorchtools import EarlyStopping, add_pr_curve_tensorboard
@@ -23,84 +23,6 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.optim import lr_scheduler
-
-
-def cv_split(headers_datasets):
-    """
-    80-20 stratified CV split across each dataset
-    """
-    
-    Codes = []
-    
-    dataset_idx = {}
-    dataset_data_labels = {} # encoding
-    dataset_train_idx = {}
-    dataset_test_idx = {}
-    
-    datasets = np.sort(list(headers_datasets.keys()))
-    filenames = []
-    global_idx = 0
-    for dataset in datasets:
-        print('Dataset ', dataset)
-        headers_dataset = headers_datasets[dataset]
-        num_files = len(headers_dataset)
-        dataset_idx[dataset] = []
-        dataset_data_labels[dataset] = []
-        for i, header_data in tqdm(enumerate(headers_dataset), disable=disable_tqdm, desc='split CV'):
-            
-            codes = get_classes_from_header(header_data)
-            filename = header_data[0].split(' ')[0].split('.')[0]
-            data_labels = get_scored_class(codes, labels)
-
-            Codes.append(codes)
-            filenames.append(filename)
-            
-            dataset_data_labels[dataset].append(data_labels)
-            dataset_idx[dataset].append(global_idx)
-            global_idx += 1
-        
-        kf = MultilabelStratifiedKFold(5, random_state=0)
-        train_idx, test_idx = next(kf.split(np.array(dataset_data_labels[dataset]), np.array(dataset_data_labels[dataset])))
-        dataset_train_idx[dataset] = train_idx +  dataset_idx[dataset][0]
-        dataset_test_idx[dataset] = test_idx + dataset_idx[dataset][0]
-        
-        print('Done.')
-    return Codes, dataset_train_idx, dataset_test_idx, filenames
-
-def get_dataset(headers, recordings=None):
-
-    dataset_mapping = {
-        'A': 1,
-        'Q': 2,
-        'I': 3,
-        'S': 4,
-        'H': 5,
-        'E': 6
-    }
-    if recordings is not None:
-        headers_datasets = {}
-        recordings_datasets = {}
-        for i, (header, recording) in enumerate(zip(headers, recordings)):
-            dataset = dataset_mapping[header[0].split(' ')[0][0]]
-            if dataset in headers_datasets:
-                headers_datasets[dataset].append(header)
-                recordings_datasets[dataset].append(recording)
-            else:
-                headers_datasets[dataset] = [header]
-                recordings_datasets[dataset] = [recording]
-        return headers_datasets, recordings_datasets
-
-    else:
-        headers_datasets = {}
-        for i, header in enumerate(headers):
-            dataset = dataset_mapping[header[0].split(' ')[0][0]]
-            if dataset in headers_datasets:
-                headers_datasets[dataset].append(header)
-            else:
-                headers_datasets[dataset] = [header]
-        return headers_datasets        
-
-from saved_data_io import write_file
 
 def train_NN_sig_feature(headers_datasets, output_directory, features):
 

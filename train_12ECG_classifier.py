@@ -3,7 +3,8 @@
 import numpy as np, os, sys
 from scipy.io import loadmat
 from write_signal import write_signal
-from train_NN_sig_feature import get_dataset, train_NN_sig_feature
+from train_NN_sig_MIL import train_NN_sig_MIL
+from manipulations import get_dataset
 
 def train_12ECG_classifier(input_directory, output_directory):
     # Load data.
@@ -30,14 +31,15 @@ def train_12ECG_classifier(input_directory, output_directory):
 
     # make cwt
     print('Write signal ...')
-    features = write_signal(recordings_datasets, headers_datasets, output_directory)
+    #write_signal(recordings_datasets, headers_datasets, output_directory)
 
     del recordings_datasets 
     del headers, header_files, num_files
 
     # train and save the best model
     print('Training NN ... ')
-    train_NN_sig_feature(headers_datasets, output_directory, features)
+    #train_NN_sig_feature(headers_datasets, output_directory, features)
+    train_NN_sig_MIL(headers_datasets, output_directory)
 
 # Load challenge data.
 def load_challenge_data(header_file):

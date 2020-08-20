@@ -178,9 +178,9 @@ class ECGResNet(nn.Module):
     Combining 12 lead ecg on a network (actually not 50)
     """
     
-    def __init__(self, in_channels, n_classes, n=3, *args, **kwargs):
+    def __init__(self, in_channels, n_classes, n=3, blocks_sizes=[64, 128, 128], *args, **kwargs):
         super().__init__()
-        self.encoder = ResNetEncoder(in_channels, block=ResNet753Block, blocks_sizes=[64, 128, 128], n=n, *args, **kwargs)
+        self.encoder = ResNetEncoder(in_channels, block=ResNet753Block, blocks_sizes=blocks_sizes, n=n, *args, **kwargs)
         self.decoder = ResnetDecoder(self.encoder.blocks[-1].blocks[-1].out_channels, n_classes)
        
     def forward(self, x):
@@ -221,5 +221,66 @@ class ECGFeatureResNet(nn.Module):
             print("x.shape", x.shape)
         x = self.decoder(x)
         return x
+
+import torch.nn.functional as F
+class ECGBagResNet(nn.Module):
+    
+    """
+    Combining 12 lead ecg on a network (actually not 50)
+    """
+    
+    def __init__(self, in_channels, n_classes, n_segments, n=3,
+            blocks_sizes=[64, 128, 128], verbose=False):
+        super().__init__()
+        encoder_dim = blocks_sizes[-1]
+        D = encoder_dim//2
+        K = encoder_dim//4
+        self.encoder = nn.Sequential(
+            ResNetEncoder(in_channels, block=ResNet753Block, 
+            blocks_sizes=blocks_sizes, n=3),
+            nn.AdaptiveAvgPool1d((1,)),
+        )
+        
+        self.attention = nn.Sequential(
+            nn.Linear(encoder_dim, D),
+            nn.Tanh(),
+            nn.Linear(D, K)
+        )
+        self.decoder = nn.Linear(4096, n_classes)
+
+        self.verbose = verbose
+        self.n_segments = n_segments
+
+    def forward(self, xs):
+        H = [self.encoder(xs[:,i,:,:]).view((xs.shape[0],-1,1)) for i in range(self.n_segments)]
+        if self.verbose:
+            print("0 H[0].shape", H[0].shape)
+        H = torch.cat(H, dim=2) # batch x channels x n_segments 
+        if self.verbose:
+            print("cat H.shape", H.shape)
+        H = torch.transpose(H, 1, 2) # batch x n_segments x channels 
+        if self.verbose:
+            print("transpose H.shape", H.shape)
+
+
+        A = self.attention(H) # batch x n_segments x channels_out
+        if self.verbose:
+            print("attention A.shape", A.shape)
+        A = torch.transpose(A, 1, 2) # batch  x channels_out x n_segments
+        if self.verbose:
+            print("transpose A.shape", A.shape)
+        A = F.softmax(A, dim=1) # batch  x channels_out x n_segments
+        if self.verbose:
+            print("softmax A.shape", A.shape)
+
+
+        M = torch.bmm(A, H)
+        if self.verbose:
+            print("bmm M.shape", M.shape)
+        M = M.view(M.size(0), -1)
+        if self.verbose:
+            print("view M.shape", M.shape)
+        y_prob = self.decoder(M)
+        return y_prob    
 
 

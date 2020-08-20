@@ -38,13 +38,11 @@ def filter_data(Data, highcut):
 
 
 
-def write_signal(recordings_datasets, headers_datasets, output_directory, disable_tqdm=disable_tqdm):
+def write_signal(recordings_datasets, headers_datasets, output_directory, 
+    disable_tqdm=disable_tqdm, features=False):
 
     if not os.path.isdir(output_directory + '/sig'):
         os.mkdir(output_directory+ '/sig')
-
-    if not os.path.isdir(output_directory + '/features'):
-        os.mkdir(output_directory+ '/features')
 
     datasets = np.sort(list(headers_datasets.keys()))
     features = []
@@ -78,7 +76,9 @@ def write_signal(recordings_datasets, headers_datasets, output_directory, disabl
                 write_file(sig_file, fData)
 
             #if not os.path.exists(feature_file):
-            feature = get_12ECG_features(data, header)
+            feature = None
+            if features:
+                feature = get_12ECG_features(data, header)
             features.append(feature)
                # write_file(feature_file, features)
             

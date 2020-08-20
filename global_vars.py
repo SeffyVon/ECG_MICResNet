@@ -47,5 +47,5 @@ normal_idx = np.argwhere(labels==int(normal_class))
 
 disable_tqdm = False
 enable_writer = True
-run_name = 'ECGFeatureResNet_trial2_ResNetBlocksizesFixed'
-    
+run_name = 'ECGBagResNet_trial0_MIL_5segs'
+n_segments = 5

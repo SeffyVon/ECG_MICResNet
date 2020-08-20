@@ -1,26 +1,23 @@
 
 from manipulations import get_classes_from_header, get_scored_class, get_name
 from global_vars import labels, equivalent_mapping, Dx_map, Dx_map_unscored, equivalent_mapping, \
-    normal_class, weights, disable_tqdm, enable_writer
+    normal_class, weights, disable_tqdm, enable_writer, run_name
 from resnet1d import ECGResNet
-from IdvImageSigDataset import IdvSigDataset
+from IdvSigDataset import IdvSigDataset
 from myeval import agg_y_preds_bags, binary_acc, geometry_loss, compute_score
 
-from pytorchtools import EarlyStopping
-from pytorch_training import add_pr_curve_tensorboard
+from pytorchtools import EarlyStopping, add_pr_curve_tensorboard
 from saved_data_io import read_file 
 
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from tqdm import tqdm
-import torch, torchvision 
-from PIL import Image
+import torch
 from iterstrat.ml_stratifiers import MultilabelStratifiedKFold
 if enable_writer:
     from torch.utils.tensorboard import SummaryWriter
 import time
-from torchvision import datasets, models, transforms
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -139,7 +136,9 @@ def train_NN_sig_only(headers_datasets, output_directory):
         for idx in dataset_test_idx[dataset]:
             test_idx.append(idx)
 
-    assert len(train_idx)+len(test_idx) == len(Codes)
+    assert len(np.unique(train_idx))+len(np.unique(test_idx)) == len(Codes)
+    assert len(np.unique(train_idx+test_idx)) == len(Codes)
+    print('CV split checked')
 
     del Codes, dataset_train_idx, dataset_test_idx, headers_datasets
 
@@ -182,8 +181,6 @@ def train_NN_sig_only(headers_datasets, output_directory):
 
     criterion_train = nn.BCEWithLogitsLoss(reduction='mean')#, weight=train_class_weight)
     criterion_test = nn.BCEWithLogitsLoss(reduction='mean')#, weight=test_class_weight)
-
-    run_name = 'modelMultiCWTFull_test_sigOnly'
 
     early_stopping = EarlyStopping(patience=50, verbose=False, 
                                   saved_dir=output_directory, 

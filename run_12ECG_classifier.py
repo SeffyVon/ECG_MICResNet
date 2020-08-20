@@ -1,12 +1,10 @@
 #!/usr/bin/env python
 
 import numpy as np, os, sys
-from global_vars import labels
+from global_vars import labels, run_name
 from get_12ECG_features import get_12ECG_features
 from resnet1d import ECGResNet
 import torch
-import torchvision
-from PIL import Image
 from write_signal import filter_data, write_signal
 import random
 
@@ -64,7 +62,6 @@ def run_12ECG_classifier(data,header_data,loaded_model, mode='random'):
 def load_trained_model(model_saved_path):
     model = ECGResNet(12, len(labels)).to(device)
     # load saved model
-    run_name = 'modelMultiCWTFull_test_sigOnly'
     model.load_state_dict(torch.load(model_saved_path+'/{}_model.dict'.format(run_name)))#, map_location=torch.device('cpu')))
     return model
 

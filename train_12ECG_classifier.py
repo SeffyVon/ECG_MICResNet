@@ -3,9 +3,7 @@
 import numpy as np, os, sys
 from scipy.io import loadmat
 from write_signal import write_signal
-from train_NN_sig_only import get_dataset, train_NN_sig_only
-#from train_NN_sig import get_dataset, train_NN_sig
-#from train_NN import get_dataset, train_NN
+from train_NN_sig_feature import get_dataset, train_NN_sig_feature
 
 def train_12ECG_classifier(input_directory, output_directory):
     # Load data.
@@ -26,29 +24,20 @@ def train_12ECG_classifier(input_directory, output_directory):
         recordings.append(recording)
         headers.append(header)
 
-    # headers = list()
-    # for i in range(num_files):
-    #     header = load_challenge_header(header_files[i])
-    #     headers.append(header)
-
     # Train model.
     print('Training and saving model...')
     headers_datasets, recordings_datasets = get_dataset(headers, recordings)
 
-    #del recordings, headers, header_files, num_files
-    #headers_datasets = get_dataset(headers, None)
-
     # make cwt
     print('Write signal ...')
-    write_signal(recordings_datasets, headers_datasets, output_directory)
+    features = write_signal(recordings_datasets, headers_datasets, output_directory)
 
     del recordings_datasets 
     del headers, header_files, num_files
 
     # train and save the best model
     print('Training NN ... ')
-    #train_NN(headers_datasets, output_directory)
-    train_NN_sig_only(headers_datasets, output_directory)
+    train_NN_sig_feature(headers_datasets, output_directory, features)
 
 # Load challenge data.
 def load_challenge_data(header_file):

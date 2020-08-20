@@ -152,6 +152,8 @@ def get_12ECG_features(data, header_data):
 
     # for testing, we included the mean age of 57 if the age is a NaN
     # This value will change as more data is being released
+    sex = 0
+    age = 0
     for iline in header_data:
         if iline.startswith('#Age'):
             tmp_age = iline.split(': ')[1].strip()
@@ -162,8 +164,8 @@ def get_12ECG_features(data, header_data):
                 sex =1
             else:
                 sex=0
-        elif iline.startswith('#Dx'):
-            label = iline.split(': ')[1].split(',')[0]
+#        elif iline.startswith('#Dx'):
+#            label = iline.split(': ')[1].split(',')[0]
 
 
     
@@ -198,6 +200,4 @@ def get_12ECG_features(data, header_data):
 
   
     return features
-
-
 

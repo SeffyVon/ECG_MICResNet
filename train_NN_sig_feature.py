@@ -1,24 +1,24 @@
 
 from manipulations import get_classes_from_header, get_scored_class, get_name
-from global_vars import labels, equivalent_mapping, Dx_map, Dx_map_unscored, equivalent_mapping, normal_class, weights
-from MultiCWTNet import MultiCWTNet
-from IdvImageDataset import IdvImageDataset
+from global_vars import labels, equivalent_mapping, Dx_map, Dx_map_unscored, equivalent_mapping, \
+    normal_class, weights, disable_tqdm, enable_writer, run_name
+from resnet1d import ECGFeatureResNet
+from IdvSigDataset import IdvSigDataset, IdvSigFeatureDataset
 from myeval import agg_y_preds_bags, binary_acc, geometry_loss, compute_score
 
-from pytorchtools import EarlyStopping
-from pytorch_training import add_pr_curve_tensorboard
+from pytorchtools import EarlyStopping, add_pr_curve_tensorboard
 from saved_data_io import read_file 
-
+from sklearn.preprocessing import normalize
+from sklearn.impute import SimpleImputer
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from tqdm import tqdm
-import torch, torchvision 
-from PIL import Image
+import torch
 from iterstrat.ml_stratifiers import MultilabelStratifiedKFold
-from torch.utils.tensorboard import SummaryWriter
+if enable_writer:
+    from torch.utils.tensorboard import SummaryWriter
 import time
-from torchvision import datasets, models, transforms
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -42,16 +42,16 @@ def cv_split(headers_datasets):
     global_idx = 0
     for dataset in datasets:
         print('Dataset ', dataset)
-
         headers_dataset = headers_datasets[dataset]
         num_files = len(headers_dataset)
         dataset_idx[dataset] = []
         dataset_data_labels[dataset] = []
-        for i, header_data in tqdm(enumerate(headers_dataset)):
+        for i, header_data in tqdm(enumerate(headers_dataset), disable=disable_tqdm, desc='split CV'):
             
             codes = get_classes_from_header(header_data)
-            filename = header_data[0].split(' ')[0]
+            filename = header_data[0].split(' ')[0].split('.')[0]
             data_labels = get_scored_class(codes, labels)
+
             Codes.append(codes)
             filenames.append(filename)
             
@@ -61,14 +61,13 @@ def cv_split(headers_datasets):
         
         kf = MultilabelStratifiedKFold(5, random_state=0)
         train_idx, test_idx = next(kf.split(np.array(dataset_data_labels[dataset]), np.array(dataset_data_labels[dataset])))
-
         dataset_train_idx[dataset] = train_idx +  dataset_idx[dataset][0]
         dataset_test_idx[dataset] = test_idx + dataset_idx[dataset][0]
         
         print('Done.')
     return Codes, dataset_train_idx, dataset_test_idx, filenames
 
-def get_dataset(headers, recordings):
+def get_dataset(headers, recordings=None):
 
     dataset_mapping = {
         'A': 1,
@@ -78,33 +77,48 @@ def get_dataset(headers, recordings):
         'H': 5,
         'E': 6
     }
+    if recordings is not None:
+        headers_datasets = {}
+        recordings_datasets = {}
+        for i, (header, recording) in enumerate(zip(headers, recordings)):
+            dataset = dataset_mapping[header[0].split(' ')[0][0]]
+            if dataset in headers_datasets:
+                headers_datasets[dataset].append(header)
+                recordings_datasets[dataset].append(recording)
+            else:
+                headers_datasets[dataset] = [header]
+                recordings_datasets[dataset] = [recording]
+        return headers_datasets, recordings_datasets
 
-    headers_datasets = {}
-    recordings_datasets = {}
-    for i, (header, recording) in enumerate(zip(headers, recordings)):
-        dataset = dataset_mapping[header[0].split(' ')[0][0]]
-        if dataset in headers_datasets:
-            headers_datasets[dataset].append(header)
-            recordings_datasets[dataset].append(recording)
-        else:
-            headers_datasets[dataset] = [header]
-            recordings_datasets[dataset] = [recording]
-    return headers_datasets, recordings_datasets
+    else:
+        headers_datasets = {}
+        for i, header in enumerate(headers):
+            dataset = dataset_mapping[header[0].split(' ')[0][0]]
+            if dataset in headers_datasets:
+                headers_datasets[dataset].append(header)
+            else:
+                headers_datasets[dataset] = [header]
+        return headers_datasets        
 
+from saved_data_io import write_file
 
-def train_NN(headers_datasets, output_directory):
+def train_NN_sig_feature(headers_datasets, output_directory, features):
 
     Codes, dataset_train_idx, dataset_test_idx, filenames = cv_split(headers_datasets)
 
+    
+    imputer=SimpleImputer().fit(features)
+    features=imputer.transform(features)
+    features = normalize(features, axis=0)
+    print("features", features.shape)
     datasets = np.sort(list(headers_datasets.keys()))
 
     # agg labels
     data_img2_labels = []
-    for i in tqdm(range(len(Codes))):
+    for i in tqdm(range(len(Codes)), disable=disable_tqdm):
         data_img2_labels.append(get_scored_class(Codes[i], labels))
     data_img2_labels = np.array(data_img2_labels)
     assert len(data_img2_labels) == len(Codes)
-
 
     # change to equivalent mapping
     key_idxes = []
@@ -127,7 +141,9 @@ def train_NN(headers_datasets, output_directory):
         for idx in dataset_test_idx[dataset]:
             test_idx.append(idx)
 
-    assert len(train_idx)+len(test_idx) == len(Codes)
+    assert len(np.unique(train_idx))+len(np.unique(test_idx)) == len(Codes)
+    assert len(np.unique(train_idx+test_idx)) == len(Codes)
+    print('CV split checked')
 
     del Codes, dataset_train_idx, dataset_test_idx, headers_datasets
 
@@ -153,13 +169,13 @@ def train_NN(headers_datasets, output_directory):
    # train_class_weight = torch.Tensor(inverse_weight(data_img2_labels[train_idx], class_idx)).to(device)
    # test_class_weight = torch.Tensor(inverse_weight(data_img2_labels[test_idx], class_idx)).to(device)
 
-    image_datasets_train = IdvImageDataset(output_directory, filenames, data_img2_labels, 
+    sig_datasets_train = IdvSigFeatureDataset(output_directory, filenames, features, data_img2_labels, 
         class_idx, 'train')
-    image_datasets_test = IdvImageDataset(output_directory, filenames, data_img2_labels, 
+    sig_datasets_test = IdvSigFeatureDataset(output_directory, filenames, features, data_img2_labels, 
         class_idx, 'test')
 
-    trainDataset = torch.utils.data.Subset(image_datasets_train, train_idx)
-    testDataset = torch.utils.data.Subset(image_datasets_test, test_idx)
+    trainDataset = torch.utils.data.Subset(sig_datasets_train, train_idx)
+    testDataset = torch.utils.data.Subset(sig_datasets_test, test_idx)
 
     batch_size = 64
     trainLoader = torch.utils.data.DataLoader(trainDataset, batch_size=batch_size, pin_memory=True, shuffle=True,
@@ -171,22 +187,25 @@ def train_NN(headers_datasets, output_directory):
     criterion_train = nn.BCEWithLogitsLoss(reduction='mean')#, weight=train_class_weight)
     criterion_test = nn.BCEWithLogitsLoss(reduction='mean')#, weight=test_class_weight)
 
-    run_name = 'modelMultiCWTFull_test_i0'
-
     early_stopping = EarlyStopping(patience=50, verbose=False, 
                                   saved_dir=output_directory, 
                                   save_name=run_name)
 
-    model = MultiCWTNet(len(class_idx), verbose=False)
+    model = ECGFeatureResNet(12, 14, len(class_idx))
+
+    with open(output_directory + '/ECGFeatureResNet_' + run_name + '.txt', 'w') as f:
+        print(model, file=f)
+
     model.to(device)
 
     optimizer = optim.Adam(model.parameters(), lr=0.01) 
-    scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.1, patience=20, mode='max')
+    scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.1, patience=20, mode='min')
 
     losses_train = []
     losses_test = []
     
-    writer = SummaryWriter(output_directory+'/runs/{}'.format(run_name))
+    if enable_writer:
+        writer = SummaryWriter(output_directory+'/runs/{}'.format(run_name))
 
 
     # training
@@ -196,37 +215,43 @@ def train_NN(headers_datasets, output_directory):
 
         y_trains = [] # ground truth
         output_trains = [] # output
-        for k, (X_train, y_train) in tqdm(enumerate(trainLoader)):
-            y_train = y_train.to(device)
-            X_train = X_train.to(device)
-            optimizer.zero_grad()
-            output_train = model(X_train)
-            output_trains.append(output_train.cpu())
-            
-            loss_train = criterion_train(output_train, y_train)
-            losses_train.append(loss_train.item())
-            
-            avg_loss_train = np.average(losses_train)
+        with tqdm(enumerate(trainLoader), desc='train', disable=disable_tqdm) as tqdm0:
+            for k, (X_sig_train, X_feature_train, y_train) in tqdm0:
+                X_sig_train = X_sig_train.to(device)
+                X_feature_train = X_feature_train.to(device)
+                y_train = y_train.to(device)
 
-            if np.mod(k, 100) == 0:
-                writer.add_scalar('train/loss',
-                avg_loss_train,
-                epoch * (len(train_idx)//batch_size//100+1) + k//100)
-
-            y_trains.append(y_train.cpu())
+                optimizer.zero_grad()
+                output_train = model(X_sig_train, X_feature_train)
+                output_trains.append(output_train.cpu())
                 
-            loss_train.backward()
-            optimizer.step()
+                loss_train = criterion_train(output_train, y_train)
+                losses_train.append(loss_train.item())
+                
+                avg_loss_train = np.average(losses_train)
+
+                if enable_writer:
+                    if np.mod(k, 100) == 0:
+                        writer.add_scalar('train/loss',
+                        avg_loss_train,
+                        epoch * (len(train_idx)//batch_size//100+1) + k//100)
+
+                y_trains.append(y_train.cpu())
+                tqdm0.set_postfix(loss=avg_loss_train)
+                    
+                loss_train.backward()
+                optimizer.step()
                 
         y_tests = [] # ground truth
         output_tests = [] # output
         with torch.no_grad():
             model.eval()
             
-            for X_test, y_test in testLoader:  
+            for X_sig_test, X_feature_test, y_test in tqdm(testLoader, desc='test', disable=disable_tqdm):  
                 y_test = y_test.to(device)
-                X_test = X_test.to(device)
-                output_test = model(X_test)
+                X_sig_test = X_sig_test.to(device)
+                X_feature_test = X_feature_test.to(device)
+                output_test = model(X_sig_test, X_feature_test)
 
                 loss_test = criterion_test(output_test, y_test)
                 losses_test.append(loss_test.item())
@@ -236,9 +261,10 @@ def train_NN(headers_datasets, output_directory):
                 
             avg_loss_test = np.average(losses_test)
 
-            writer.add_scalar('test/loss',
-                avg_loss_test,
-                epoch)
+            if enable_writer:
+                writer.add_scalar('test/loss',
+                    avg_loss_test,
+                    epoch)
 
 
         y_trains_tensor = torch.cat(y_trains, axis=0) # ground truth
@@ -250,9 +276,10 @@ def train_NN(headers_datasets, output_directory):
         output_tests = torch.cat(output_tests, axis=0)
         y_test_preds = torch.sigmoid(output_tests)
 
-        for class_i_idx in range(len(class_idx)):
-            add_pr_curve_tensorboard(writer, class_i_idx, y_trains_tensor, y_train_preds, names, global_step=epoch, prefix='train/')
-            add_pr_curve_tensorboard(writer, class_i_idx, y_tests_tensor, y_test_preds, names, global_step=epoch, prefix='test/')
+        if enable_writer:
+            for class_i_idx in range(len(class_idx)):
+                add_pr_curve_tensorboard(writer, class_i_idx, y_trains_tensor, y_train_preds, names, global_step=epoch, prefix='train/')
+                add_pr_curve_tensorboard(writer, class_i_idx, y_tests_tensor, y_test_preds, names, global_step=epoch, prefix='test/')
 
 
 
@@ -267,41 +294,42 @@ def train_NN(headers_datasets, output_directory):
             epoch, (time.time()-st)/60,
             avg_loss_train, acc, fmeasure, fbeta, gbeta, geometry, score,
             avg_loss_test, acc2, fmeasure2, fbeta2, gbeta2, geometry2, score2)
-        scheduler.step(geometry2)
+        scheduler.step(avg_loss_test)
 
-        writer.add_scalar('train/score',
-            score,
-            epoch)
-        writer.add_scalar('train/gbeta',
-                gbeta,
+        if enable_writer:
+            writer.add_scalar('train/score',
+                score,
                 epoch)
-        writer.add_scalar('train/fbeta',
-                fbeta,
-                epoch)
-        writer.add_scalar('train/geometry',
-                geometry,
-                epoch)
-        
-        writer.add_scalar('test/score',
-                score2,
-                epoch)
-        writer.add_scalar('test/gbeta',
-                gbeta2,
-                epoch)
-        writer.add_scalar('test/fbeta',
-                fbeta2,
-                epoch)
-        writer.add_scalar('test/geometry',
-                geometry2,
-                epoch)
+            writer.add_scalar('train/gbeta',
+                    gbeta,
+                    epoch)
+            writer.add_scalar('train/fbeta',
+                    fbeta,
+                    epoch)
+            writer.add_scalar('train/geometry',
+                    geometry,
+                    epoch)
+            
+            writer.add_scalar('test/score',
+                    score2,
+                    epoch)
+            writer.add_scalar('test/gbeta',
+                    gbeta2,
+                    epoch)
+            writer.add_scalar('test/fbeta',
+                    fbeta2,
+                    epoch)
+            writer.add_scalar('test/geometry',
+                    geometry2,
+                    epoch)
 
         
-        print(output_str)
+        print(output_str)        
         with open(output_directory+'/loss_{}.txt'.format(run_name), 'a') as f:
             print(output_str, file=f)
 
-        early_stopping(-geometry2, model)
+        early_stopping(avg_loss_test, model)
 
         if early_stopping.early_stop:
-            print("Early stopping")
+            print("Early stopping with min validation loss:", early_stopping.val_loss_min)
             break

@@ -26,33 +26,6 @@ def compute_modified_confusion_matrix(labels, outputs):
 
     return A
 
-# Compute the evaluation metric for the Challenge.
-def compute_challenge_metric(weights, labels, outputs, classes, normal_class):
-    num_recordings, num_classes = np.shape(labels)
-    normal_index = classes.index(normal_class)
-
-    # Compute the observed score.
-    A = compute_modified_confusion_matrix(labels, outputs)
-    observed_score = np.nansum(weights * A)
-
-    # Compute the score for the model that always chooses the correct label(s).
-    correct_outputs = labels
-    A = compute_modified_confusion_matrix(labels, correct_outputs)
-    correct_score = np.nansum(weights * A)
-
-    # Compute the score for the model that always chooses the normal class.
-    inactive_outputs = np.zeros((num_recordings, num_classes), dtype=np.bool)
-    inactive_outputs[:, normal_index] = 1
-    A = compute_modified_confusion_matrix(labels, inactive_outputs)
-    inactive_score = np.nansum(weights * A)
-
-    if correct_score != inactive_score:
-        normalized_score = float(observed_score - inactive_score) / float(correct_score - inactive_score)
-    else:
-        normalized_score = float('nan')
-
-    return normalized_score
-
 def compute_beta_score(labels, output, beta, num_classes, check_errors=True):
 
     # Check inputs for errors.
@@ -439,24 +412,24 @@ def binary_acc(y_preds, y_tests, beta=2, mode='mean'):
 def geometry_loss(fbeta, gbeta):
     return np.sqrt(fbeta*gbeta)
 
-def compute_score(labels, outputs, weights, class_idx=list(range(27)), normal_index=normal_idx):
+def compute_score(y_labels, y_outputs, weights, class_idx=list(range(27)), normal_index=normal_idx):
     # use a subset of class
     weights = weights[class_idx, class_idx]
 
-    num_recordings, num_classes = np.shape(labels)
+    num_recordings, num_classes = np.shape(y_labels)
     # Compute the observed score.
-    A = compute_modified_confusion_matrix(labels, outputs)
+    A = compute_modified_confusion_matrix(y_labels, y_outputs)
     observed_score = np.nansum(weights * A)
 
     # Compute the score for the model that always chooses the correct label(s).
-    correct_outputs = labels
-    A = compute_modified_confusion_matrix(labels, correct_outputs)
+    correct_outputs = y_labels
+    A = compute_modified_confusion_matrix(y_labels, correct_outputs)
     correct_score = np.nansum(weights * A)
 
     # Compute the score for the model that always chooses the normal class.
     inactive_outputs = np.zeros((num_recordings, num_classes), dtype=np.bool)
     inactive_outputs[:, normal_index] = 1
-    A = compute_modified_confusion_matrix(labels, inactive_outputs)
+    A = compute_modified_confusion_matrix(y_labels, inactive_outputs)
     inactive_score = np.nansum(weights * A)
 
     if correct_score != inactive_score:

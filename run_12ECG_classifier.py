@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 
 import numpy as np, os, sys
-from global_vars import labels, run_name, n_segments
+from global_vars import labels, run_name, n_segments, max_segment_len
 from get_12ECG_features import get_12ECG_features
 from resnet1d import ECGBagResNet
 import torch
-from write_signal import filter_data, write_signal
+from signal_processing import filter_data
 import random
 
 device = None
@@ -26,13 +26,13 @@ def segment_sig(fData, n_segments):
     if fData.shape[1] < 3000:
         fData = np.pad(fData, pad_width=((0,0),(0,3000-fData.shape[1])), mode='constant', constant_values=0)
    
-    segment_len = (fData.shape[1] - 3000) //(n_segments+1)
-    j_sigs = [segment_len * k for k in range(n_segments)]
+    segment_offset_len = (fData.shape[1] - 3000) //(n_segments+1)
+    j_sigs = [segment_offset_len * k for k in range(n_segments)]
 
     # instances in a bag
     fDatas = np.array([[fData[:12,j_sig:j_sig+3000] for j_sig in j_sigs]])
     sample =torch.from_numpy(fDatas).type(torch.FloatTensor)
-
+    print(sample.shape)
     return sample
 
 def run_12ECG_classifier(data,header_data,loaded_model):

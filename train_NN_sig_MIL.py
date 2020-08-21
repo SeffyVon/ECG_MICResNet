@@ -1,13 +1,15 @@
 
 from manipulations import get_scored_class, get_name, cv_split
 from global_vars import labels, equivalent_mapping, Dx_map, Dx_map_unscored, \
-    normal_class, weights, disable_tqdm, enable_writer, run_name, n_segments
+    normal_class, weights, disable_tqdm, enable_writer, run_name, n_segments, max_segment_len
 from resnet1d import ECGBagResNet
 from dataset import BagSigDataset
 from myeval import agg_y_preds_bags, binary_acc, geometry_loss, compute_score
-
+#from imbalanced_sampler import ImbalancedDatasetSampler
+from imbalanced_weights import inverse_weight
 from pytorchtools import EarlyStopping, add_pr_curve_tensorboard
 from saved_data_io import read_file 
+from loss import MulticlassDSCLoss
 
 import numpy as np
 import pandas as pd
@@ -23,7 +25,8 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.optim import lr_scheduler
 
-def train_NN_sig_MIL(headers_datasets, output_directory):
+
+def train_NN_sig_MIL(headers_datasets, output_directory, fDatas):
 
     Codes, dataset_train_idx, dataset_test_idx, filenames = cv_split(headers_datasets)
 
@@ -82,33 +85,35 @@ def train_NN_sig_MIL(headers_datasets, output_directory):
 
     st = time.time()
 
-   # train_class_weight = torch.Tensor(inverse_weight(data_img2_labels[train_idx], class_idx)).to(device)
-   # test_class_weight = torch.Tensor(inverse_weight(data_img2_labels[test_idx], class_idx)).to(device)
+    train_class_weight = torch.Tensor(inverse_weight(data_img2_labels[train_idx], class_idx)).to(device)
+    test_class_weight = torch.Tensor(inverse_weight(data_img2_labels[test_idx], class_idx)).to(device)
 
-    sig_datasets_train = BagSigDataset(output_directory, filenames, data_img2_labels, 
-        class_idx, 'train', n_segments)
-    sig_datasets_test = BagSigDataset(output_directory, filenames, data_img2_labels, 
-        class_idx, 'test', n_segments)
+    sig_datasets_train = BagSigDataset(fDatas, data_img2_labels, 
+        class_idx, 'train', n_segments, max_segment_len)
+    sig_datasets_test = BagSigDataset(fDatas, data_img2_labels, 
+        class_idx, 'test', n_segments, max_segment_len)
 
     trainDataset = torch.utils.data.Subset(sig_datasets_train, train_idx)
     testDataset = torch.utils.data.Subset(sig_datasets_test, test_idx)
 
     batch_size = 64
-    trainLoader = torch.utils.data.DataLoader(trainDataset, batch_size=batch_size, pin_memory=True, shuffle=True, num_workers=8)
-    testLoader = torch.utils.data.DataLoader(testDataset, batch_size=300, shuffle=False, pin_memory=True, num_workers=8)
+    trainLoader = torch.utils.data.DataLoader(trainDataset, batch_size=batch_size, pin_memory=True, shuffle=True, num_workers=0)
+       # sampler=ImbalancedDatasetSampler(trainDataset, callback_get_label=lambda x, i: tuple(x[i][1].tolist())))
+    testLoader = torch.utils.data.DataLoader(testDataset, batch_size=300, shuffle=False, pin_memory=True, num_workers=0)
+    pos_weight = torch.from_numpy(np.array([2 for _ in range(len(class_idx))])).to(device)
 
-
-    criterion_train = nn.BCEWithLogitsLoss(reduction='mean')#, weight=train_class_weight)
-    criterion_test = nn.BCEWithLogitsLoss(reduction='mean')#, weight=test_class_weight)
-
-    early_stopping = EarlyStopping(patience=30, verbose=False, 
+    #criterion_train = MulticlassDSCLoss() #)#, weight=train_class_weight)
+    #criterion_test = MulticlassDSCLoss() #nn.BCEWithLogitsLoss(reduction='mean')#, weight=test_class_weight)
+    criterion_train = nn.BCEWithLogitsLoss(reduction='mean', weight=train_class_weight, pos_weight=pos_weight)
+    criterion_test = nn.BCEWithLogitsLoss(reduction='mean', weight=test_class_weight, pos_weight=pos_weight)
+    early_stopping = EarlyStopping(patience=20, verbose=False, 
                                   saved_dir=output_directory, 
                                   save_name=run_name)
 
-    model = ECGBagResNet(12, len(class_idx), n_segments)
 
+    model = ECGBagResNet(12, len(class_idx), n_segments)
     with open(output_directory + '/ECGBagResNet' + run_name + '.txt', 'w') as f:
-        print(model, file=f)
+       print(model, file=f)
 
     model.to(device)
 
@@ -123,7 +128,7 @@ def train_NN_sig_MIL(headers_datasets, output_directory):
 
 
     # training
-    for epoch in range(0, 80):
+    for epoch in range(0, 100):
 
         model.train()
 

@@ -7,7 +7,6 @@ import os, sys
 from manipulations import get_classes, get_classes_from_header, get_Fs_from_header, load_challenge_data
 from saved_data_io import read_file, write_file
 from global_vars import disable_tqdm
-import pywt
 from scipy import signal 
 from scipy.io import loadmat
 

@@ -32,7 +32,6 @@ def segment_sig(fData, n_segments):
     # instances in a bag
     fDatas = np.array([[fData[:12,j_sig:j_sig+3000] for j_sig in j_sigs]])
     sample =torch.from_numpy(fDatas).type(torch.FloatTensor)
-    print(sample.shape)
     return sample
 
 def run_12ECG_classifier(data,header_data,loaded_model):

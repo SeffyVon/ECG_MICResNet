@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 
 import numpy as np, os, sys
-from scipy.io import loadmat
-from write_signal import write_signal
+
+from signal_processing import read_signal
 from train_NN_sig_MIL import train_NN_sig_MIL
 from manipulations import get_dataset
 
@@ -18,36 +18,25 @@ def train_12ECG_classifier(input_directory, output_directory):
 
     num_files = len(header_files)
 
-    recordings = list()
     headers = list()
     for i in range(num_files):
-        recording, header = load_challenge_data(header_files[i])
-        recordings.append(recording)
+        header = load_challenge_header(header_files[i])
         headers.append(header)
 
     # Train model.
-    print('Training and saving model...')
-    headers_datasets, recordings_datasets = get_dataset(headers, recordings)
+    print('Split dataset...')
+    headers_datasets = get_dataset(headers)
 
     # make cwt
-    print('Write signal ...')
-    write_signal(recordings_datasets, headers_datasets, output_directory)
+    print('Read signal ...')
+    fDatas = read_signal(input_directory, headers_datasets, output_directory)
 
-    del recordings_datasets 
+    assert len(fDatas) == len(headers)
     del headers, header_files, num_files
 
     # train and save the best model
     print('Training NN ... ')
-    train_NN_sig_MIL(headers_datasets, output_directory)
-
-# Load challenge data.
-def load_challenge_data(header_file):
-    with open(header_file, 'r') as f:
-        header = f.readlines()
-    mat_file = header_file.replace('.hea', '.mat')
-    x = loadmat(mat_file)
-    recording = np.asarray(x['val'], dtype=np.float64)
-    return recording, header
+    train_NN_sig_MIL(headers_datasets, output_directory, fDatas)
 
 # Load challenge data.
 def load_challenge_header(header_file):

@@ -19,34 +19,66 @@ class DiceLoss(nn.Module):
         loss = 1 - loss.sum() / N
  
         return loss
- 
+
+
 class MulticlassDiceLoss(nn.Module):
     """
     requires one hot encoded target. Applies DiceLoss on each class iteratively.
     requires input.shape[0:1] and target.shape[0:1] to be (N, C) where N is
       batch size and C is number of classes
     """
-    def __init__(self):
+    def __init__(self, weights=None):
         super(MulticlassDiceLoss, self).__init__()
- 
-    def forward(self, input, target, weights=None):
+        self.weights = weights
+
+    def forward(self, input, target):
  
         C = target.shape[1]
  
-        # if weights is None:
-        #   weights = torch.ones(C) #uniform weights for all classes
- 
-        dice = DiceLoss()
-        totalLoss = 0
- 
-        for i in range(C):
-            diceLoss = dice(input[:,i], target[:,i])
-            if weights is not None:
-                diceLoss *= weights[i]
-            totalLoss += diceLoss
- 
-        return totalLoss
+        if self.weights is None:
+            self.weights = torch.ones(C) #uniform weights for all classes
 
+        # set-typed DL from paper
+        smooth = 1
+        loss = 1- (2*(input*target).sum(1) + smooth) / ((input**2).sum(1) + (target**2).sum(1) + smooth)
+
+        loss = loss.sum()
+ 
+        return loss
+
+class MulticlassDSCLoss(nn.Module):
+    """
+    requires one hot encoded target. Applies DiceLoss on each class iteratively.
+    requires input.shape[0:1] and target.shape[0:1] to be (N, C) where N is
+      batch size and C is number of classes
+    """
+    def __init__(self, weights=None):
+        super(MulticlassDSCLoss, self).__init__()
+        self.weights = weights
+
+    def forward(self, input, target):
+ 
+        C = target.shape[1]
+ 
+        if self.weights is None:
+            self.weights = torch.ones(C) #uniform weights for all classes
+ 
+        # for i in range(C):
+        #     dscloss = dsc(input[:,i], target[:,i])
+        #     dscloss *= self.weights[i]
+        #     totalLoss += dscloss
+        # smooth = 1
+        # numerator = 2 * ((1-input)*input*target).sum() + smooth 
+        # denominator = ((1-input)*input + target).sum() + smooth
+        # loss = numerator/denominator
+        # return loss
+
+        smooth = 1
+        numerator = 2 * ((1-input)*input*target).sum(1) + smooth 
+        denominator = ((1-input)*input + target).sum(1) + smooth
+        loss = 1-numerator/denominator
+        loss = loss.sum()
+        return loss
 
 def weighted_binary_cross_entropy2(sigmoid_x, y, weighted_matrix, weight=None, reduction=None):
     """

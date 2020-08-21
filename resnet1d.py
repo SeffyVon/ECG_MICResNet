@@ -66,6 +66,21 @@ class ResNet753Block(ResNetResidualBlock):
              conv_bn(self.in_channels, out_channels, conv=self.conv, kernel_size=3),
         )
 
+class ResNet333Block(ResNetResidualBlock):
+    """
+    Basic ResNet block composed by two layers of 3conv/batchnorm/activation
+    """
+    
+    def __init__(self, in_channels, out_channels, *args, **kwargs):
+        super().__init__(in_channels, out_channels, *args, **kwargs)
+        self.blocks = nn.Sequential(
+             conv_bn(self.in_channels, self.in_channels, conv=self.conv, kernel_size=3),
+             activation_func(self.activation),
+             conv_bn(self.in_channels, self.in_channels, conv=self.conv, kernel_size=3, stride=self.downsampling),
+             activation_func(self.activation),
+             conv_bn(self.in_channels, out_channels, conv=self.conv, kernel_size=3),
+        )
+
 class ResNetLayer(nn.Module):
     """
     A ResNet layer composed by `n` blocks stacked one after the other
@@ -246,6 +261,7 @@ class ECGBagResNet(nn.Module):
             nn.Tanh(),
             nn.Linear(D, K)
         )
+        # ll.bias = nn.Parameter(init_bias)
         self.decoder = nn.Linear(4096, n_classes)
 
         self.verbose = verbose

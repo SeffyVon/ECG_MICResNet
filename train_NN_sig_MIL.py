@@ -94,8 +94,8 @@ def train_NN_sig_MIL(headers_datasets, output_directory):
     testDataset = torch.utils.data.Subset(sig_datasets_test, test_idx)
 
     batch_size = 64
-    trainLoader = torch.utils.data.DataLoader(trainDataset, batch_size=batch_size, pin_memory=True, shuffle=True)
-    testLoader = torch.utils.data.DataLoader(testDataset, batch_size=300, shuffle=False, pin_memory=True)
+    trainLoader = torch.utils.data.DataLoader(trainDataset, batch_size=batch_size, pin_memory=True, shuffle=True, num_workers=8)
+    testLoader = torch.utils.data.DataLoader(testDataset, batch_size=300, shuffle=False, pin_memory=True, num_workers=8)
 
 
     criterion_train = nn.BCEWithLogitsLoss(reduction='mean')#, weight=train_class_weight)

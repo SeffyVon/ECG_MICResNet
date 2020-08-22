@@ -20,6 +20,24 @@ class DiceLoss(nn.Module):
  
         return loss
 
+class DSCLoss(nn.Module):
+    def __init__(self):
+        super(DSCLoss, self).__init__()
+ 
+    def forward(self, input, target):
+        N = target.size(0)
+        smooth = 1
+ 
+        input_flat = input.view(N, -1)
+        target_flat = target.view(N, -1)
+ 
+        intersection = input_flat * target_flat
+ 
+        numerator = 2 * ((1-input_flat)*input_flat*target_flat).sum(1) + smooth 
+        denominator = ((1-input_flat)*input_flat + target_flat).sum(1) + smooth
+        loss = 1-numerator/denominator
+ 
+        return loss.sum()
 
 class MulticlassDiceLoss(nn.Module):
     """
@@ -39,12 +57,16 @@ class MulticlassDiceLoss(nn.Module):
             self.weights = torch.ones(C) #uniform weights for all classes
 
         # set-typed DL from paper
-        smooth = 1
-        loss = 1- (2*(input*target).sum(1) + smooth) / ((input**2).sum(1) + (target**2).sum(1) + smooth)
+        # smooth = 1
+        # loss = 1- (2*(input*target).sum(1) + smooth) / ((input**2).sum(1) + (target**2).sum(1) + smooth)
+        totalLoss = 0
+        dl = DiceLoss()
+        for i in range(C):
+            dscloss = dl(input[:,i], target[:,i])
+            dscloss *= self.weights[i]
+            totalLoss += dscloss
 
-        loss = loss.sum()
- 
-        return loss
+        return totalLoss
 
 class MulticlassDSCLoss(nn.Module):
     """
@@ -63,22 +85,20 @@ class MulticlassDSCLoss(nn.Module):
         if self.weights is None:
             self.weights = torch.ones(C) #uniform weights for all classes
  
-        # for i in range(C):
-        #     dscloss = dsc(input[:,i], target[:,i])
-        #     dscloss *= self.weights[i]
-        #     totalLoss += dscloss
-        # smooth = 1
-        # numerator = 2 * ((1-input)*input*target).sum() + smooth 
-        # denominator = ((1-input)*input + target).sum() + smooth
-        # loss = numerator/denominator
-        # return loss
+        dsc = DSCLoss()
+        totalLoss = 0
+        for i in range(C):
+            dscloss = dsc(input[:,i], target[:,i])
+            dscloss *= self.weights[i]
+            totalLoss += dscloss
+        return totalLoss
 
-        smooth = 1
-        numerator = 2 * ((1-input)*input*target).sum(1) + smooth 
-        denominator = ((1-input)*input + target).sum(1) + smooth
-        loss = 1-numerator/denominator
-        loss = loss.sum()
-        return loss
+        # smooth = 1
+        # numerator = 2 * ((1-input)*input*target).sum(1) + smooth 
+        # denominator = ((1-input)*input + target).sum(1) + smooth
+        # loss = 1-numerator/denominator
+        # loss = loss.sum()
+        # return loss
 
 def weighted_binary_cross_entropy2(sigmoid_x, y, weighted_matrix, weight=None, reduction=None):
     """

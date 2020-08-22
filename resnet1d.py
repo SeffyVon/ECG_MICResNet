@@ -250,6 +250,8 @@ class ECGBagResNet(nn.Module):
         encoder_dim = blocks_sizes[-1]
         D = encoder_dim//2
         K = encoder_dim//4
+        # D = encoder_dim
+        # K = encoder_dim
         self.encoder = nn.Sequential(
             ResNetEncoder(in_channels, block=ResNet753Block, 
             blocks_sizes=blocks_sizes, n=3),
@@ -263,6 +265,7 @@ class ECGBagResNet(nn.Module):
         )
         # ll.bias = nn.Parameter(init_bias)
         self.decoder = nn.Linear(4096, n_classes)
+        #self.decoder = nn.Linear(16384, n_classes) #
 
         self.verbose = verbose
         self.n_segments = n_segments
@@ -298,5 +301,4 @@ class ECGBagResNet(nn.Module):
             print("view M.shape", M.shape)
         y_prob = self.decoder(M)
         return y_prob    
-
 

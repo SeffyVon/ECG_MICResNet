@@ -75,7 +75,18 @@ def inverse_weight(Data_labels, class_idx, K=1):
 
     # return inv_class_weights
 
-    Data_labels = Data_labels[class_idx]
+    Data_labels = Data_labels[:,class_idx]
     N_labels = np.sum(Data_labels, axis=0).flatten()+1
 
     return np.log((np.sum(N_labels)-N_labels)/N_labels + K)
+
+def inverse_weight_no_log(Data_labels, class_idx, K=1):
+    # inv_class_weights = 1.0/np.sum(Data_labels, axis=0)[class_idx]
+    # inv_class_weights = inv_class_weights / np.sum(inv_class_weights)
+
+    # return inv_class_weights
+
+    Data_labels = Data_labels[:,class_idx]
+    N_labels = np.sum(Data_labels, axis=0).flatten()+1
+
+    return (np.sum(N_labels)-N_labels)/N_labels + K

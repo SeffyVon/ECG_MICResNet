@@ -38,11 +38,9 @@ def train_NN_sig_MIL(headers_datasets, output_directory, fDatas):
     assert len(data_img2_labels) == len(Codes)
 
     # change to equivalent mapping
-    key_idxes = []
     for key in equivalent_mapping.keys():
-        print(key)
+        print('equivalent', key, equivalent_mapping[key])
         key_idx = np.argwhere(labels==int(key)).flatten()[0]
-        key_idxes.append(key_idx)
         val_idx = np.argwhere(labels==int(equivalent_mapping[key])).flatten()[0]
         key_pos = np.argwhere(data_img2_labels[:,key_idx]==1).flatten()
         val_pos = np.argwhere(data_img2_labels[:,val_idx]==1).flatten()
@@ -215,6 +213,9 @@ def train_NN_sig_MIL(headers_datasets, output_directory, fDatas):
             writer.add_scalar('train/score',
                 score,
                 epoch)
+            writer.add_scalar('train/fmeasure',
+                    fmeasure,
+                    epoch)
             writer.add_scalar('train/gbeta',
                     gbeta,
                     epoch)
@@ -227,6 +228,9 @@ def train_NN_sig_MIL(headers_datasets, output_directory, fDatas):
             
             writer.add_scalar('test/score',
                     score2,
+                    epoch)
+            writer.add_scalar('test/fmeasure',
+                    fmeasure2,
                     epoch)
             writer.add_scalar('test/gbeta',
                     gbeta2,

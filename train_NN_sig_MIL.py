@@ -5,11 +5,9 @@ from global_vars import labels, equivalent_mapping, Dx_map, Dx_map_unscored, \
 from resnet1d import ECGBagResNet
 from dataset import BagSigDataset
 from myeval import agg_y_preds_bags, binary_acc, geometry_loss, compute_score
-#from imbalanced_sampler import ImbalancedDatasetSampler
 from imbalanced_weights import inverse_weight
 from pytorchtools import EarlyStopping, add_pr_curve_tensorboard
 from saved_data_io import read_file 
-from loss import MulticlassDSCLoss
 
 import numpy as np
 import pandas as pd
@@ -71,7 +69,7 @@ def train_NN_sig_MIL(headers_datasets, output_directory, fDatas):
     names = np.array(names)[class_idx]
     normal_idx = np.argwhere(labels[class_idx]==int(normal_class)).flatten()[0]
 
-    print("#classes: ", len(class_idx))
+    print("#classes: ", len(class_idx), "data_img2_labels.dim", data_img2_labels.shape)
     print("normal_idx: ", normal_idx)
 
     # get device
@@ -87,6 +85,8 @@ def train_NN_sig_MIL(headers_datasets, output_directory, fDatas):
 
     train_class_weight = torch.Tensor(inverse_weight(data_img2_labels[train_idx], class_idx)).to(device)
     test_class_weight = torch.Tensor(inverse_weight(data_img2_labels[test_idx], class_idx)).to(device)
+    print("train_class_weight", train_class_weight)
+    print("test_class_weight", test_class_weight)
 
     sig_datasets_train = BagSigDataset(fDatas, data_img2_labels, 
         class_idx, 'train', n_segments, max_segment_len)
@@ -102,8 +102,6 @@ def train_NN_sig_MIL(headers_datasets, output_directory, fDatas):
     testLoader = torch.utils.data.DataLoader(testDataset, batch_size=300, shuffle=False, pin_memory=True, num_workers=0)
     pos_weight = torch.from_numpy(np.array([2 for _ in range(len(class_idx))])).to(device)
 
-    #criterion_train = MulticlassDSCLoss() #)#, weight=train_class_weight)
-    #criterion_test = MulticlassDSCLoss() #nn.BCEWithLogitsLoss(reduction='mean')#, weight=test_class_weight)
     criterion_train = nn.BCEWithLogitsLoss(reduction='mean', weight=train_class_weight, pos_weight=pos_weight)
     criterion_test = nn.BCEWithLogitsLoss(reduction='mean', weight=test_class_weight, pos_weight=pos_weight)
     early_stopping = EarlyStopping(patience=20, verbose=False, 

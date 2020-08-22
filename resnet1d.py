@@ -299,4 +299,3 @@ class ECGBagResNet(nn.Module):
         y_prob = self.decoder(M)
         return y_prob    
 
-

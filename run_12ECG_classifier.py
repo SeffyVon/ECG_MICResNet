@@ -54,7 +54,7 @@ def run_12ECG_classifier(data,header_data,loaded_model):
 def load_trained_model(model_saved_path):
     model = ECGBagResNet(12, len(labels), n_segments).to(device)
     # load saved model
-    model.load_state_dict(torch.load(model_saved_path+'/{}_model.dict'.format(run_name)))#, map_location=torch.device('cpu')))
+    model.load_state_dict(torch.load(model_saved_path+'/{}_model_final_40.dict'.format(run_name)))#, map_location=torch.device('cpu')))
     return model
 
 def load_12ECG_model(input_directory):

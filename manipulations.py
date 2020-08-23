@@ -81,7 +81,7 @@ def get_name(code, Dx_map, Dx_map_unscored):
 def get_scored_class(code, labels):
     return [1 if label in code else 0 for label in labels]
 
-def cv_split(headers_datasets):
+def cv_split(headers_datasets, i_fold=0):
     """
     80-20 stratified CV split across each dataset
     """
@@ -116,7 +116,12 @@ def cv_split(headers_datasets):
             global_idx += 1
         
         kf = MultilabelStratifiedKFold(5, random_state=0)
-        train_idx, test_idx = next(kf.split(np.array(dataset_data_labels[dataset]), np.array(dataset_data_labels[dataset])))
+        kf_splits = kf.split(np.array(dataset_data_labels[dataset]), np.array(dataset_data_labels[dataset]))
+        train_idx = None
+        test_idx = None
+        for _ in range(i_fold+1):
+            train_idx, test_idx = next(kf_splits)
+
         dataset_train_idx[dataset] = train_idx +  dataset_idx[dataset][0]
         dataset_test_idx[dataset] = test_idx + dataset_idx[dataset][0]
         

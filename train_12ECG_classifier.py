@@ -3,6 +3,7 @@
 import numpy as np, os, sys
 
 from signal_processing import read_signal
+from train_NN_full import train_NN_sig_MIL_full
 from train_NN_sig_MIL import train_NN_sig_MIL
 from manipulations import get_dataset
 
@@ -36,7 +37,7 @@ def train_12ECG_classifier(input_directory, output_directory):
 
     # train and save the best model
     print('Training NN ... ')
-    train_NN_sig_MIL(headers_datasets, output_directory, fDatas)
+    train_NN_sig_MIL_full(headers_datasets, output_directory, fDatas)
 
 # Load challenge data.
 def load_challenge_header(header_file):

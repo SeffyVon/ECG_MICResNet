@@ -23,10 +23,12 @@ class EarlyStopping:
         self.save_name = save_name
         self.saved_dir = saved_dir
 
-    def __call__(self, val_loss, model):
+    def __call__(self, val_loss, model, epoch):
 
         score = -val_loss
 
+        if np.mod(epoch, 10) == 0:
+            self.save_checkpoint(val_loss, model, epoch)
         if self.best_score is None:
             self.best_score = score
             self.save_checkpoint(val_loss, model)
@@ -41,11 +43,13 @@ class EarlyStopping:
             self.save_checkpoint(val_loss, model)
             self.counter = 0
 
-    def save_checkpoint(self, val_loss, model):
+
+    def save_checkpoint(self, val_loss, model, epoch='best'):
         '''Saves model when validation loss decrease.'''
         if self.verbose:
             print(f'Validation loss decreased ({self.val_loss_min:.6f} --> {val_loss:.6f}).  Saving model ...')
-        torch.save(model.state_dict(), '{}/{}_model.dict'.format(self.saved_dir, self.save_name))
+
+        torch.save(model.state_dict(), '{}/{}_model_{}.dict'.format(self.saved_dir, self.save_name, epoch))
         #torch.save(model, '{}/{}_checkpoint.pt'.format(self.saved_dir, self.save_name))
         self.val_loss_min = val_loss
 

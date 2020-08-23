@@ -45,9 +45,11 @@ for class1, class2 in equivalent_classes:
     
 normal_idx = np.argwhere(labels==int(normal_class))
 
+
 disable_tqdm = True
 enable_writer = False
-run_name = 'ECGBagResNet_trial0_MIL_5segs_3000len_pos2_fixed_balanced' 
+run_name_base = 'ECGBagResNet_trial0_MIL_5segs_3000len_pos2_fixed_balanced_fullset'
+run_name = run_name_base
 n_segments = 5
 max_segment_len = 3000
 

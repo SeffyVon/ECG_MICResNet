@@ -357,9 +357,10 @@ def binary_acc_mic(y_preds, y_tests, beta=2):
     #return accs, fbetas, fmeasures, gbetas, aurocs, auprcs
     return np.mean(accs), np.mean(fbetas), np.mean(fmeasures), np.mean(gbetas), np.mean(aurocs), np.mean(auprcs)
 
-def binary_acc(y_preds, y_tests, beta=2, mode='mean'):
+def binary_acc(y_preds, y_tests, beta=1, mode='mean'):
     accs = []
     fmeasures = []
+    gmeasures = []
     fbetas = []
     gbetas = []
     aurocs = []
@@ -394,6 +395,7 @@ def binary_acc(y_preds, y_tests, beta=2, mode='mean'):
         # acc, fmeasure, fbeta, gbeta
         acc = float(tp + tn) / float(tp + fp + fn + tn) if (tp + fp + fn + tn) > 0 else 1.0
         fmeasure = float(2 * tp) / float(2 * tp + fp + fn) if (2 * tp + fp + fn) > 0 else 1.0
+        gmeasure = float(tp) / float(tp + fp + fn) if (tp + fp + fn) > 0 else 1.0
         fbeta = float((1+beta**2)* tp) / float(((1+beta**2)*tp) + (fn*beta**2) + fp) if ((1+beta**2)*tp) + (fn*beta**2) + fp > 0 else 1.0
         gbeta = float(tp) / float(tp + fp + beta*fn) if tp + fp + beta*fn > 0 else 1.0
     
@@ -401,13 +403,14 @@ def binary_acc(y_preds, y_tests, beta=2, mode='mean'):
         accs.append(acc)#.data.cpu().numpy())
         fbetas.append(fbeta)#.data.cpu().numpy())
         fmeasures.append(fmeasure)
+        gmeasures.append(gmeasure)
         gbetas.append(gbeta)
  #       aurocs.append(auroc)
  #       auprcs.append(auprc)
     
     if mode == 'mean':
-        return np.mean(accs), np.mean(fbetas), np.mean(fmeasures), np.mean(gbetas)#, np.mean(aurocs), np.mean(auprcs)
-    return accs, fbetas, fmeasures, gbetas#, aurocs, auprcs
+        return np.mean(accs), np.mean(fmeasures), np.mean(gmeasures), np.mean(fbetas), np.mean(gbetas)#, np.mean(aurocs), np.mean(auprcs)
+    return accs, fmeasures, gmeasures, fbetas, gbetas#, aurocs, auprcs
 
 def geometry_loss(fbeta, gbeta):
     return np.sqrt(fbeta*gbeta)

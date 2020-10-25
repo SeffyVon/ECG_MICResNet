@@ -1,6 +1,5 @@
-# CinC2020
+# PhysioNet/CinC2020 entry
 
-Team name: ECGLearner
+Implementation of <<Deep Multi-Label Multi-Instance Classification on 12-Lead ECG>>
 
-Continuous wavelet transform to make the scaleograme for 12-channel ECG
-Resnet50 to train
+https://www.cinc.org/2020/Program/accepted/95_CinCFinalPDF.pdf

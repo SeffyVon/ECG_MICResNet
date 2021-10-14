@@ -1,6 +1,8 @@
 # PhysioNet/CinC2020 entry
 
-Implementation of <<Deep Multi-Label Multi-Instance Classification on 12-Lead ECG>>
+Implementation of <<Deep Multi-Label Multi-Instance Classification on 12-Lead ECG>> from PhysioNet/CinC2020 challenge.
+
+For preliminary running instructions, please see here https://github.com/physionetchallenges/python-classifier-2020
 
 https://www.cinc.org/2020/Program/accepted/95_CinCFinalPDF.pdf
 
